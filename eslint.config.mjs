@@ -25,8 +25,8 @@ export default tseslint.config(
     },
   },
   {
-    // Supertest response bodies are `any`; asserting on them is the point of these tests.
-    files: ['test/**/*.ts'],
+    // Supertest bodies and asymmetric matchers (expect.any) are `any`; asserting on them is the point of tests.
+    files: ['test/**/*.ts', 'src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
