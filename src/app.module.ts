@@ -5,11 +5,11 @@ import { EnvModule } from './config/env.module.js';
 import { HealthController } from './health/health.controller.js';
 import { InquiriesController } from './inquiries/inquiries.controller.js';
 import { InquiriesService } from './inquiries/inquiries.service.js';
-import { LlmModule } from './llm/llm.module.js';
 import { PrismaService } from './prisma/prisma.service.js';
+import { TriageModule } from './triage/triage.module.js';
 
 @Module({
-  imports: [EnvModule, LlmModule],
+  imports: [EnvModule, TriageModule],
   controllers: [HealthController, InquiriesController],
   providers: [
     { provide: APP_FILTER, useClass: SafeExceptionFilter },

@@ -13,6 +13,7 @@ const EnvSchema = z
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
     MAX_INQUIRY_CHARS: z.coerce.number().int().positive().default(4000),
+    TRIAGE_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
 
     LLM_PROVIDER: z.enum(['fake', 'openrouter']).default('fake'),
     LLM_BASE_URL: z.url().default('https://openrouter.ai/api/v1'),
