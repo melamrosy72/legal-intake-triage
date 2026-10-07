@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
@@ -95,6 +103,25 @@ describe('Inquiries API', () => {
   ])('returns 400 for %s', async (_case, key, body) => {
     await post(key, body).expect(400);
     expect(await prisma.inquiry.count()).toBe(0);
+  });
+
+  it('answers malformed JSON with 400 and never logs the body', async () => {
+    const logged: unknown[] = [];
+    const spy = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation((...args) => void logged.push(...args));
+    try {
+      await request(app.getHttpServer())
+        .post('/inquiries')
+        .set('Idempotency-Key', randomUUID())
+        .set('Content-Type', 'application/json')
+        .send('{"text": "SECRET-CLIENT-TEXT')
+        .expect(400);
+    } finally {
+      spy.mockRestore();
+    }
+    // Nest's Express adapter turns the parse error into a 400 itself and logs nothing.
+    expect(JSON.stringify(logged)).not.toContain('SECRET-CLIENT-TEXT');
   });
 
   it('accepts text exactly at MAX_INQUIRY_CHARS', async () => {
