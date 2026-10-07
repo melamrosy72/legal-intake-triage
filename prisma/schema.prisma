@@ -6,3 +6,74 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum InquiryStatus {
+  RECEIVED
+  PROCESSING
+  COMPLETED
+  NEEDS_HUMAN_REVIEW
+}
+
+enum ReviewReason {
+  LOW_CONFIDENCE
+  INVALID_OUTPUT
+  UNGROUNDED_EVIDENCE
+  SUSPECTED_INJECTION
+  MODEL_REFUSED
+  PROVIDER_FAILURE
+}
+
+model Inquiry {
+  id             String        @id @default(uuid())
+  idempotencyKey String        @unique
+  requestHash    String // sha256 of the trimmed inquiry text
+  rawText        String
+  status         InquiryStatus @default(RECEIVED)
+  reviewReason   ReviewReason?
+  result         Json? // the validated triage object; null if output was never valid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  processedAt    DateTime?
+  llmCalls       LlmCall[]
+
+  @@index([status, createdAt])
+  @@map("inquiries")
+}
+
+enum LlmCallKind {
+  INITIAL
+  REPAIR
+}
+
+enum LlmCallOutcome {
+  OK
+  SCHEMA_INVALID
+  UNGROUNDED
+  TRUNCATED
+  REFUSED
+  TIMEOUT
+  RATE_LIMITED
+  PROVIDER_ERROR
+  NON_RETRYABLE_ERROR
+}
+
+model LlmCall {
+  id            String         @id @default(uuid())
+  inquiryId     String
+  inquiry       Inquiry        @relation(fields: [inquiryId], references: [id])
+  jobAttempt    Int // which BullMQ attempt this call belonged to (1-based)
+  kind          LlmCallKind
+  provider      String
+  model         String
+  promptVersion String
+  latencyMs     Int
+  inputTokens   Int?
+  outputTokens  Int?
+  outcome       LlmCallOutcome
+  httpStatus    Int?
+  errorCode     String? // short machine code, never the inquiry text
+  createdAt     DateTime       @default(now())
+
+  @@index([inquiryId, createdAt])
+  @@map("llm_calls")
+}
