@@ -242,6 +242,52 @@ describe('OpenAiCompatibleLlmClient error normalization', () => {
     });
   });
 
+  describe('403 variants', () => {
+    const forbidden = (metadata?: Record<string, unknown>) => ({
+      error: { code: 403, message: 'blocked', ...(metadata && { metadata }) },
+    });
+
+    it.each([
+      [
+        'moderation (reasons + flagged_input)',
+        {
+          reasons: ['violence'],
+          flagged_input: 'SECRET...',
+          provider_name: 'X',
+          model_slug: 'y',
+        },
+      ],
+      ['content_policy_violation', { error_type: 'content_policy_violation' }],
+      ['provider refusal', { error_type: 'refusal' }],
+    ])('maps a %s 403 to a refused response', async (_name, metadata) => {
+      const { result } = await run(403, forbidden(metadata));
+      expect(result).toMatchObject({
+        stopReason: 'refused',
+        json: null,
+        model: CONFIG.model,
+      });
+      expect(JSON.stringify(result)).not.toContain('SECRET');
+    });
+
+    it('maps a content refusal embedded in a 200 body to refused', async () => {
+      const { result } = await run(200, forbidden({ error_type: 'refusal' }));
+      expect(result).toMatchObject({ stopReason: 'refused', json: null });
+    });
+
+    it.each([
+      ['permission_denied', { error_type: 'permission_denied' }],
+      ['guardrail block', { patterns: ['ignore all previous instructions'] }],
+      ['no metadata', undefined],
+    ])('keeps a %s 403 as AUTH', async (_name, metadata) => {
+      const { result } = await run(403, forbidden(metadata));
+      expect(kindOf(result)).toMatchObject({
+        kind: 'AUTH',
+        retryable: false,
+        httpStatus: 403,
+      });
+    });
+  });
+
   it('reads retry-after on a 429', async () => {
     const { result } = await run(429, errorBody(429), {
       headers: { 'retry-after': '7' },

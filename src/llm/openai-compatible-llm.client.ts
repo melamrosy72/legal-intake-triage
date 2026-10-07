@@ -24,7 +24,7 @@ export interface OpenAiCompatibleConfig {
 interface CompletionBody {
   model?: string;
   provider?: string;
-  error?: { code?: unknown };
+  error?: { code?: unknown; metadata?: unknown };
   choices?: Array<{
     finish_reason?: string | null;
     error?: { code?: unknown };
@@ -69,13 +69,25 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
         { timeout: req.timeoutMs, maxRetries: 0 },
       );
     } catch (err) {
+      if (
+        err instanceof APIError &&
+        err.status === 403 &&
+        isContentRefusal(err.error)
+      ) {
+        return this.refusal(started);
+      }
       throw toTransportError(err);
     }
     const latencyMs = Math.round(performance.now() - started);
 
     // OpenRouter can report an upstream failure inside a 200 response.
-    if (body.error)
-      throw LlmTransportError.fromStatus(toStatus(body.error.code));
+    if (body.error) {
+      const status = toStatus(body.error.code);
+      if (status === 403 && isContentRefusal(body.error)) {
+        return this.refusal(started);
+      }
+      throw LlmTransportError.fromStatus(status);
+    }
     const choice = body.choices?.[0];
     if (!choice) throw LlmTransportError.fromStatus(502);
     if (choice.error || choice.finish_reason === 'error') {
@@ -96,12 +108,27 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
         // Includes reasoning tokens: they are billed and count against max_tokens.
         outputTokens: body.usage?.completion_tokens,
       },
-      provider: this.isOpenRouter
-        ? `openrouter${body.provider ? `/${body.provider}` : ''}`
-        : 'openai-compatible',
+      provider: this.providerName(body.provider),
       model: body.model ?? this.config.model, // the model actually used, not only the one requested
       latencyMs,
     };
+  }
+
+  /** A content-moderation 403 is the input being refused, not a credentials problem. */
+  private refusal(started: number): LlmResponse {
+    return {
+      json: null,
+      stopReason: 'refused',
+      usage: {},
+      provider: this.providerName(),
+      model: this.config.model,
+      latencyMs: Math.round(performance.now() - started),
+    };
+  }
+
+  private providerName(upstream?: string): string {
+    if (!this.isOpenRouter) return 'openai-compatible';
+    return upstream ? `openrouter/${upstream}` : 'openrouter';
   }
 
   private buildBody(req: LlmRequest): Record<string, unknown> {
@@ -167,6 +194,28 @@ function toTransportError(err: unknown): unknown {
     );
   }
   return err; // not a transport failure (a bug); let it surface unchanged
+}
+
+/**
+ * OpenRouter 403s come in three kinds, told apart by `error.metadata` (Chat Completions format):
+ * moderation (`reasons` + `flagged_input`), content policy (`error_type` "content_policy_violation"
+ * or "refusal"), and permission/guardrail blocks. Only the first two are refusals of the content.
+ * `flagged_input` holds up to 100 chars of the inquiry: it is never read or logged.
+ */
+function isContentRefusal(error: unknown): boolean {
+  const metadata = (error as { metadata?: Record<string, unknown> } | null)
+    ?.metadata;
+  if (!metadata) return false;
+  if (
+    Array.isArray(metadata.reasons) &&
+    typeof metadata.flagged_input === 'string'
+  ) {
+    return true;
+  }
+  return (
+    metadata.error_type === 'content_policy_violation' ||
+    metadata.error_type === 'refusal'
+  );
 }
 
 /** Embedded error codes are usually HTTP statuses; anything unrecognised is treated as a 502. */
