@@ -16,13 +16,16 @@ const EnvSchema = z
     TRIAGE_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
     QUEUE_ATTEMPTS: z.coerce.number().int().min(1).default(4),
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(2),
-    // Jobs started per window. A job makes 1 model call, or 2 when it needs a repair.
-    WORKER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(15),
+    // Jobs started per window. A job makes 1 model call, or 2 with a repair: 8 jobs/min keeps
+    // the worst case (16 requests/min) under a 20 requests/min provider cap.
+    WORKER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(8),
     WORKER_RATE_LIMIT_DURATION_MS: z.coerce
       .number()
       .int()
       .min(1)
       .default(60_000),
+    // Pause between eval cases: 2 calls per case worst case, so 7s keeps it under 20 requests/min.
+    EVAL_DELAY_MS: z.coerce.number().int().min(0).default(7_000),
 
     LLM_PROVIDER: z.enum(['fake', 'openrouter']).default('fake'),
     LLM_BASE_URL: z.url().default('https://openrouter.ai/api/v1'),
