@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';
 import type { InquiryStatus } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TriageQueue } from '../triage/triage.queue.js';
 import { InquiryIdSchema } from './dto/create-inquiry.dto.js';
 
 const inquiryDetail = {
@@ -53,7 +54,10 @@ export type CreateInquiryOutcome =
 
 @Injectable()
 export class InquiriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queue: TriageQueue,
+  ) {}
 
   /**
    * Insert-first idempotency: the unique index on idempotencyKey decides who wins a race.
@@ -64,29 +68,43 @@ export class InquiriesService {
     text: string,
   ): Promise<CreateInquiryOutcome> {
     const requestHash = createHash('sha256').update(text).digest('hex');
+    let inquiry: { id: string; status: InquiryStatus };
     try {
-      const inquiry = await this.prisma.inquiry.create({
+      inquiry = await this.prisma.inquiry.create({
         data: { idempotencyKey, requestHash, rawText: text },
         select: { id: true, status: true },
       });
-      await this.enqueue(inquiry.id);
-      return { created: true, inquiry };
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
-      const existing = await this.prisma.inquiry.findUnique({
-        where: { idempotencyKey },
-        select: { ...inquiryDetail, requestHash: true },
-      });
-      // Only the idempotency key is unique besides the uuid id, so this is unreachable in practice.
-      if (!existing) throw err;
-      const { requestHash: existingHash, ...detail } = existing;
-      if (existingHash !== requestHash) {
-        throw new ConflictException(
-          'Idempotency-Key was already used with a different request body',
-        );
-      }
-      return { created: false, inquiry: toDetailView(detail) };
+      return this.replay(idempotencyKey, requestHash, err);
     }
+    // Known gap (README): if the process dies between the insert and this line, the inquiry
+    // stays RECEIVED with no job until the client replays the request (see replay()).
+    await this.queue.enqueue(inquiry.id);
+    return { created: true, inquiry };
+  }
+
+  private async replay(
+    idempotencyKey: string,
+    requestHash: string,
+    uniqueViolation: unknown,
+  ): Promise<CreateInquiryOutcome> {
+    const existing = await this.prisma.inquiry.findUnique({
+      where: { idempotencyKey },
+      select: { ...inquiryDetail, requestHash: true },
+    });
+    // Only the idempotency key is unique besides the uuid id, so this is unreachable in practice.
+    if (!existing) throw uniqueViolation;
+    const { requestHash: existingHash, ...detail } = existing;
+    if (existingHash !== requestHash) {
+      throw new ConflictException(
+        'Idempotency-Key was already used with a different request body',
+      );
+    }
+    // Still RECEIVED: the first request may have failed after its insert, before enqueueing.
+    // jobId = inquiry id makes this a no-op when the job already exists.
+    if (detail.status === 'RECEIVED') await this.queue.enqueue(detail.id);
+    return { created: false, inquiry: toDetailView(detail) };
   }
 
   async findOne(id: string) {
@@ -126,9 +144,6 @@ export class InquiriesService {
         rows.length > params.limit && last ? encodeCursor(last) : null,
     };
   }
-
-  // ponytail: no-op until M4 adds the BullMQ queue (jobId = inquiry id).
-  private async enqueue(_inquiryId: string): Promise<void> {}
 }
 
 function toDetailView({ llmCalls, ...rest }: InquiryDetailRow) {
