@@ -242,6 +242,35 @@ describe('TriageProcessor', () => {
     });
   });
 
+  describe("'failed' listener (jobs BullMQ gives up on)", () => {
+    const failedJob = (inquiryId: string, finishedOn?: number) =>
+      ({ data: { inquiryId }, finishedOn }) as unknown as Job<TriageJobData>;
+
+    it('marks an open inquiry NEEDS_HUMAN_REVIEW(INTERNAL_ERROR) once the job is finally failed', async () => {
+      const id = await insert('PROCESSING');
+      await processor.onJobFailed(failedJob(id, Date.now()));
+      expect(await load(id)).toMatchObject({
+        status: 'NEEDS_HUMAN_REVIEW',
+        reviewReason: 'INTERNAL_ERROR',
+      });
+    });
+
+    it('ignores a failed attempt that BullMQ will retry', async () => {
+      const id = await insert('PROCESSING');
+      await processor.onJobFailed(failedJob(id, undefined));
+      expect((await load(id)).status).toBe('PROCESSING');
+    });
+
+    it('never overwrites an inquiry that already reached a final state', async () => {
+      const id = await insert('COMPLETED');
+      await processor.onJobFailed(failedJob(id, Date.now()));
+      expect(await load(id)).toMatchObject({
+        status: 'COMPLETED',
+        reviewReason: null,
+      });
+    });
+  });
+
   it('uses worker concurrency and rate limiter from env', () => {
     const worker = (
       processor as unknown as { worker: { opts: Record<string, unknown> } }

@@ -69,6 +69,35 @@ export class TriageProcessor implements OnModuleInit, OnModuleDestroy {
         `worker error ${errorClass}${code ? ` code=${code}` : ''}`,
       );
     });
+    this.worker.on('failed', (job) => void this.onJobFailed(job));
+  }
+
+  /**
+   * Safety net for jobs BullMQ gives up on without our process() deciding the outcome: a job
+   * that stalled more than maxStalledCount times is failed by BullMQ itself (UnrecoverableError,
+   * our code never runs), and a final write that threw on the last attempt also lands here.
+   * BullMQ emits 'failed' after EVERY failed attempt; `finishedOn` is only set once it stops retrying.
+   */
+  async onJobFailed(job: Job<TriageJobData> | undefined): Promise<void> {
+    if (!job?.finishedOn) return; // will be retried, or no job to act on
+    const { inquiryId } = job.data;
+    try {
+      const written = await this.finish(inquiryId, {
+        status: 'NEEDS_HUMAN_REVIEW',
+        reviewReason: 'INTERNAL_ERROR',
+        result: null,
+      });
+      if (written) {
+        this.logger.warn(
+          `inquiry=${inquiryId} job failed permanently, NEEDS_HUMAN_REVIEW(INTERNAL_ERROR)`,
+        );
+      }
+    } catch (err) {
+      const { errorClass, code } = describeError(err);
+      this.logger.error(
+        `inquiry=${inquiryId} could not record permanent job failure ${errorClass}${code ? ` code=${code}` : ''}`,
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

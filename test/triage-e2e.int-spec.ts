@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Redis } from 'ioredis';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeLlmClient, keywordTriage } from '../src/llm/fake-llm.client.js';
@@ -81,6 +82,39 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
     ]);
     // First backoff is 2s plus up to 25% jitter.
     expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+  });
+
+  it('a job BullMQ fails for stalling too often ends as NEEDS_HUMAN_REVIEW(INTERNAL_ERROR)', async () => {
+    // Reproduce BullMQ's own stall-limit path: moveStalledJobsToWait sets the job's deferred
+    // failure ("defa") and puts it back in the waiting list; the next worker to fetch it fails it
+    // with UnrecoverableError without running our processor, and emits 'failed'.
+    await t.worker.pause();
+    const redis = new Redis(process.env.REDIS_URL!);
+    let id: string;
+    try {
+      const { body } = await request(t.app.getHttpServer())
+        .post('/inquiries')
+        .set('Idempotency-Key', randomUUID())
+        .send({ text: TEXT })
+        .expect(202);
+      id = body.id;
+      await redis.hset(
+        `bull:triage:${id}`,
+        'defa',
+        'job stalled more than allowable limit',
+      );
+    } finally {
+      redis.disconnect();
+      await t.worker.resume();
+    }
+
+    const done = await poll(id);
+
+    expect(done).toMatchObject({
+      status: 'NEEDS_HUMAN_REVIEW',
+      reviewReason: 'INTERNAL_ERROR',
+      attempts: [], // the processor never ran, so the model was never called
+    });
   });
 
   it('the job carries only the inquiry id, never the text', async () => {
