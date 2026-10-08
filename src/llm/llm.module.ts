@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env.js';
-import { FakeLlmClient, keywordTriage } from './fake-llm.client.js';
+import { FAKE_MODEL, FakeLlmClient, keywordTriage } from './fake-llm.client.js';
 import { LLM_CLIENT, type LlmClient } from './llm-client.interface.js';
 import { OpenAiCompatibleLlmClient } from './openai-compatible-llm.client.js';
+
+/** The model the configured client will use (LLM_MODEL is ignored by the fake). */
+export function configuredModel(env: Env): string {
+  return env.LLM_PROVIDER === 'fake' ? FAKE_MODEL : env.LLM_MODEL!;
+}
 
 export function createLlmClient(env: Env): LlmClient {
   if (env.LLM_PROVIDER === 'fake') return new FakeLlmClient(keywordTriage);

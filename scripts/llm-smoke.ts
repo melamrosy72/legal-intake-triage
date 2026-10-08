@@ -5,7 +5,7 @@
  */
 import { loadDotEnv, parseEnv } from '../src/config/env.js';
 import { LlmTransportError } from '../src/llm/llm.errors.js';
-import { createLlmClient } from '../src/llm/llm.module.js';
+import { configuredModel, createLlmClient } from '../src/llm/llm.module.js';
 import {
   TRIAGE_JSON_SCHEMA,
   TRIAGE_SCHEMA_NAME,
@@ -20,7 +20,7 @@ const env = parseEnv();
 const client = createLlmClient(env);
 
 console.log(
-  `provider=${env.LLM_PROVIDER} model=${env.LLM_MODEL ?? 'fake'} mode=${env.LLM_STRUCTURED_MODE} maxTokens=${env.LLM_MAX_OUTPUT_TOKENS} reasoningEffort=${env.LLM_REASONING_EFFORT ?? 'unset'}`,
+  `provider=${env.LLM_PROVIDER} model=${configuredModel(env)} mode=${env.LLM_STRUCTURED_MODE} maxTokens=${env.LLM_MAX_OUTPUT_TOKENS} reasoningEffort=${env.LLM_REASONING_EFFORT ?? 'unset'}`,
 );
 try {
   const res = await client.generateStructured({

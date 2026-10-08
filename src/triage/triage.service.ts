@@ -6,6 +6,7 @@ import type {
 } from '../generated/prisma/enums.js';
 import type { LlmClient, LlmResponse } from '../llm/llm-client.interface.js';
 import { LlmTransportError } from '../llm/llm.errors.js';
+import { configuredModel } from '../llm/llm.module.js';
 import { checkGrounding } from './grounding.js';
 import {
   buildRepairMessage,
@@ -61,7 +62,7 @@ export function triageConfigFromEnv(env: Env): TriageConfig {
     timeoutMs: env.LLM_TIMEOUT_MS,
     temperature: env.LLM_TEMPERATURE,
     provider: env.LLM_PROVIDER,
-    model: env.LLM_MODEL ?? 'fake-keyword-v1',
+    model: configuredModel(env),
   };
 }
 

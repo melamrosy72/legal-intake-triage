@@ -102,6 +102,8 @@ const SPAM = [
 const INJECTION =
   /ignore (?:all |any |your |previous |prior )*instructions|disregard (?:the|your) (?:rules|instructions)|system prompt/i;
 
+export const FAKE_MODEL = 'fake-keyword-v1';
+
 /** Deterministic keyword classifier used when LLM_PROVIDER=fake. Quotes are always copied from the text. */
 export function keywordTriage(req: LlmRequest): LlmResponse {
   const text =
@@ -141,7 +143,7 @@ export function keywordTriage(req: LlmRequest): LlmResponse {
     confidence: area || isSpam ? 0.9 : 0.4,
   };
   return fakeResponse(triage, {
-    model: 'fake-keyword-v1',
+    model: FAKE_MODEL,
     latencyMs: 0,
     usage: {
       inputTokens: Math.ceil((req.system.length + req.user.length) / 4),
