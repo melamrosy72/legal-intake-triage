@@ -57,13 +57,13 @@ A law firm receives free-text inquiries from prospective clients (web form, emai
 
 ## 3. Stack
 
-- Node.js 20.19+ (CI and Docker use Node 22 LTS or later), TypeScript 6 in strict mode, NestJS 12 (ESM)
+- Node.js ^22.22.3 or >=24.15 (the Nest CLI's tooling requires it; CI and the Docker image use Node 24 LTS), TypeScript 6 in strict mode, NestJS 12 (ESM)
 - PostgreSQL 16 with Prisma 7 through the `pg` driver adapter (`@prisma/adapter-pg`)
 - Redis 7 with BullMQ 6, used directly (`Queue` and `Worker` in two small Nest providers). `@nestjs/bullmq` is not used: it takes worker options only as static decorator arguments, and concurrency, the rate limiter and the backoff strategy come from the validated environment.
 - Zod 4 for the output schema, request validation and environment validation
 - Vitest and Supertest (Nest 12 is ESM-only and its scaffold uses Vitest; Jest's ESM mode is experimental)
 - ESLint and Prettier
-- Docker Compose for Postgres and Redis; the app container is added with the Dockerfile in M6
+- Docker Compose for Postgres, Redis, a one-shot `migrate` job and the app (fixed to the fake provider)
 - LLM provider: selected by `LLM_PROVIDER` (`openrouter` or `fake`). The real adapter targets **OpenRouter** through its OpenAI-compatible chat completions API, using the official OpenAI SDK (retries off) with a configurable base URL (`LLM_BASE_URL`). On OpenRouter it sends `provider: { require_parameters: true }` and, when `LLM_REASONING_EFFORT` is set, `reasoning: { effort, exclude: true }`. Because the base URL and model are configuration, the same adapter also works against other OpenAI-compatible endpoints (newer OpenAI reasoning models need `max_completion_tokens` instead of `max_tokens`).
 
 ---
@@ -433,13 +433,18 @@ Validate with Zod at boot and fail fast on anything missing or malformed.
 | `LLM_API_KEY` | – | Required unless provider is `fake` |
 | `LLM_MODEL` | – | Required unless provider is `fake` |
 | `LLM_STRUCTURED_MODE` | `json_schema` | `json_schema` or `json_object` |
-| `EVAL_DELAY_MS` | `4000` | Pause between evaluation cases to stay under free-tier rate limits |
-| `LLM_TIMEOUT_MS` | `20000` | Per-request timeout |
+| `EVAL_DELAY_MS` | `7000` | Pause between evaluation cases: with up to 2 calls per case this stays under 20 requests/min |
+| `LLM_TIMEOUT_MS` | `30000` | Per-request timeout (the free reasoning model's p95 was 18.9 s) |
+| `LLM_REASONING_EFFORT` | unset | OpenRouter only: sends `reasoning: { effort, exclude: true }` when set; leave unset for non-reasoning models |
 | `LLM_MAX_OUTPUT_TOKENS` | `800` | Output cap |
 | `LLM_TEMPERATURE` | unset | Sent only if set |
 | `TRIAGE_CONFIDENCE_THRESHOLD` | `0.7` | Below this goes to review |
 | `QUEUE_ATTEMPTS` | `4` | Max job attempts for transport failures |
+| `WORKER_CONCURRENCY` | `2` | Jobs processed at once by the worker |
+| `WORKER_RATE_LIMIT_MAX` | `8` | Jobs started per window; with up to 2 calls per job this stays under 20 requests/min |
+| `WORKER_RATE_LIMIT_DURATION_MS` | `60000` | Rate-limit window |
 | `MAX_INQUIRY_CHARS` | `4000` | Input size limit |
+| `PORT` | `3000` | HTTP port |
 
 ---
 
