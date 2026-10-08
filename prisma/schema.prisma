@@ -21,6 +21,7 @@ enum ReviewReason {
   SUSPECTED_INJECTION
   MODEL_REFUSED
   PROVIDER_FAILURE
+  INTERNAL_ERROR // a non-provider failure (bug, database) that outlasted every attempt
 }
 
 model Inquiry {

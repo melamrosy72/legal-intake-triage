@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ReviewReason" ADD VALUE 'INTERNAL_ERROR';
