@@ -25,5 +25,40 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot: applies migrations, then exits. Uses the build stage, which has the Prisma CLI.
+  migrate:
+    build:
+      context: .
+      target: build
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://triage:triage@postgres:5432/triage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://triage:triage@postgres:5432/triage
+      REDIS_URL: redis://redis:6379
+      # Fixed on purpose: compose would otherwise pick up LLM_PROVIDER from a local .env and
+      # spend real requests. Use `npm run start:dev` with .env for a real provider.
+      LLM_PROVIDER: fake
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   pgdata:
