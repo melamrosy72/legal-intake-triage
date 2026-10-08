@@ -7,6 +7,8 @@ import { InquiriesController } from './inquiries/inquiries.controller.js';
 import { InquiriesService } from './inquiries/inquiries.service.js';
 import { PrismaService } from './prisma/prisma.service.js';
 import { TriageModule } from './triage/triage.module.js';
+import { TriageProcessor } from './triage/triage.processor.js';
+import { TriageQueue } from './triage/triage.queue.js';
 
 @Module({
   imports: [EnvModule, TriageModule],
@@ -15,6 +17,8 @@ import { TriageModule } from './triage/triage.module.js';
     { provide: APP_FILTER, useClass: SafeExceptionFilter },
     PrismaService,
     InquiriesService,
+    TriageQueue,
+    TriageProcessor, // the worker runs in the API process (demo trade-off, see README)
   ],
 })
 export class AppModule {}
