@@ -6,6 +6,8 @@ import {
   acceptedAreas,
   computeMetrics,
   parseDataset,
+  renderResults,
+  runCase,
   parseRunFile,
   scoredById,
   withTransportRetry,
@@ -283,5 +285,166 @@ describe('run file and metrics', () => {
       scored(`c${i}`, { latencyMs: (i + 1) * 100 }),
     );
     expect(computeMetrics(lines).latencyMs).toEqual({ avg: 1050, p95: 1900 });
+  });
+});
+
+describe('runCase', () => {
+  const call = (kind: 'INITIAL' | 'REPAIR', outcome: string) => ({
+    kind,
+    outcome: outcome as never,
+    provider: 'p',
+    model: 'm',
+    promptVersion: 'v',
+    latencyMs: 5,
+  });
+  const opts = {
+    maxRetries: 3,
+    maxWaitMs: 60_000,
+    sleep: () => Promise.resolve(),
+  };
+  const decision = { status: 'COMPLETED', result: null } as never;
+
+  it('keeps the calls and the error of every failed attempt, and the calls of the final one', async () => {
+    let attempt = 0;
+    const outcome = await runCase(async (record) => {
+      attempt++;
+      if (attempt === 1) {
+        await record(call('INITIAL', 'UNGROUNDED'));
+        await record(call('REPAIR', 'TIMEOUT'));
+        throw new LlmTransportError('TIMEOUT', true);
+      }
+      await record(call('INITIAL', 'OK'));
+      return decision;
+    }, opts);
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      retries: 1,
+      calls: [{ kind: 'INITIAL', outcome: 'OK' }],
+      failedAttempts: [
+        {
+          calls: [
+            { kind: 'INITIAL', outcome: 'UNGROUNDED' },
+            { kind: 'REPAIR', outcome: 'TIMEOUT' },
+          ],
+          error: { errorClass: 'LlmTransportError', kind: 'TIMEOUT' },
+        },
+      ],
+    });
+    // promptVersion is dropped from stored calls (it is in the run's meta line)
+    expect(JSON.stringify(outcome)).not.toContain('promptVersion');
+  });
+
+  it('records the final failed attempt when the case cannot be scored', async () => {
+    const outcome = await runCase(async (record) => {
+      await record(call('INITIAL', 'NON_RETRYABLE_ERROR'));
+      throw new LlmTransportError('AUTH', false, 401);
+    }, opts);
+    expect(outcome).toMatchObject({
+      ok: false,
+      retries: 0,
+      failedAttempts: [
+        {
+          error: { kind: 'AUTH', httpStatus: 401 },
+          calls: [{ outcome: 'NON_RETRYABLE_ERROR' }],
+        },
+      ],
+    });
+  });
+});
+
+describe('renderResults', () => {
+  const meta = {
+    type: 'meta' as const,
+    startedAt: 't',
+    provider: 'openrouter',
+    model: 'm',
+    promptVersion: 'triage-v2',
+    structuredMode: 'json_schema',
+    reasoningEffort: 'low',
+    maxOutputTokens: 2000,
+    timeoutMs: 20_000,
+  };
+  const line = (over: Record<string, unknown>) =>
+    ({
+      type: 'case',
+      id: 'c1',
+      scored: true,
+      expected: {
+        isLegalInquiry: true,
+        practiceArea: 'FAMILY',
+        urgency: 'LOW',
+      },
+      actual: {
+        status: 'COMPLETED',
+        reviewReason: null,
+        isLegalInquiry: true,
+        practiceArea: 'FAMILY',
+        urgency: 'LOW',
+        confidence: 0.9,
+      },
+      calls: [
+        {
+          kind: 'INITIAL',
+          outcome: 'OK',
+          provider: 'p',
+          model: 'm',
+          latencyMs: 5,
+        },
+      ],
+      latencyMs: 5,
+      requests: 1,
+      retries: 0,
+      finishedAt: 't',
+      ...over,
+    }) as ScoredLine;
+
+  it('shows the timeout, failed attempts in order, and the hand-written notes', () => {
+    const l = line({
+      retries: 1,
+      requests: 3,
+      failedAttempts: [
+        {
+          calls: [
+            {
+              kind: 'INITIAL',
+              outcome: 'UNGROUNDED',
+              provider: 'p',
+              model: 'm',
+              latencyMs: 5,
+            },
+            {
+              kind: 'REPAIR',
+              outcome: 'TIMEOUT',
+              provider: 'p',
+              model: 'm',
+              latencyMs: 5,
+            },
+          ],
+          error: { errorClass: 'LlmTransportError', kind: 'TIMEOUT' },
+        },
+      ],
+    });
+    const md = renderResults(meta, computeMetrics([l]), [l], 'My analysis.');
+    expect(md).toContain('timeout 20000 ms');
+    expect(md).toContain(
+      '[INITIAL:UNGROUNDED, REPAIR:TIMEOUT, failed: TIMEOUT] → INITIAL:OK',
+    );
+    expect(md.trimEnd().endsWith('## Notes' + '\n\n' + 'My analysis.')).toBe(
+      true,
+    );
+  });
+
+  it('says so when an older run file did not record failed attempts', () => {
+    const l = line({ retries: 1 });
+    const md = renderResults(
+      { ...meta, timeoutMs: undefined },
+      computeMetrics([l]),
+      [l],
+    );
+    expect(md).toContain(
+      '[1 failed attempt(s), details not recorded] → INITIAL:OK',
+    );
+    expect(md).toContain('timeout not recorded ms');
   });
 });

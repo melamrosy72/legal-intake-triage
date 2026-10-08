@@ -3,6 +3,7 @@ import { LlmTransportError } from '../src/llm/llm.errors.js';
 import { computeBackoffMs } from '../src/triage/backoff.js';
 import { PRACTICE_AREAS } from '../src/triage/triage.schema.js';
 import type {
+  RecordCall,
   TriageCallRecord,
   TriageDecision,
 } from '../src/triage/triage.service.js';
@@ -55,6 +56,23 @@ export interface RunMeta {
   structuredMode: string;
   reasoningEffort: string | null;
   maxOutputTokens: number;
+  /** Absent in run files written before it was recorded. */
+  timeoutMs?: number;
+}
+
+type CallSummary = Omit<TriageCallRecord, 'promptVersion'>;
+
+export interface ErrorSummary {
+  errorClass: string;
+  kind?: string;
+  httpStatus?: number;
+  retryAfterMs?: number;
+}
+
+/** One attempt that ended in an error: the calls it made before failing, and why it failed. */
+export interface FailedAttempt {
+  calls: CallSummary[];
+  error: ErrorSummary;
 }
 
 export interface ScoredLine {
@@ -70,7 +88,10 @@ export interface ScoredLine {
     urgency: string | null;
     confidence: number | null;
   };
-  calls: Array<Omit<TriageCallRecord, 'promptVersion'>>;
+  /** Calls of the successful (final) attempt. */
+  calls: CallSummary[];
+  /** Absent in run files written before it was recorded. */
+  failedAttempts?: FailedAttempt[];
   latencyMs: number;
   requests: number;
   retries: number;
@@ -81,12 +102,8 @@ export interface NotScoredLine {
   type: 'case';
   id: string;
   scored: false;
-  error: {
-    errorClass: string;
-    kind?: string;
-    httpStatus?: number;
-    retryAfterMs?: number;
-  };
+  error: ErrorSummary;
+  failedAttempts?: FailedAttempt[];
   requests: number;
   retries: number;
   finishedAt: string;
@@ -168,6 +185,82 @@ export async function withTransportRetry<T>(
   }
 }
 
+export function summarizeError(err: unknown): ErrorSummary {
+  if (err instanceof LlmTransportError) {
+    return {
+      errorClass: 'LlmTransportError',
+      kind: err.kind,
+      httpStatus: err.httpStatus,
+      retryAfterMs: err.retryAfterMs,
+    };
+  }
+  return { errorClass: err instanceof Error ? err.name : typeof err };
+}
+
+const summarizeCalls = (calls: TriageCallRecord[]): CallSummary[] =>
+  calls.map(({ promptVersion: _, ...rest }) => rest);
+
+/**
+ * Runs one case with transport retries and keeps the calls of every attempt: the successful
+ * one in `calls`, and each failed one (with its error) in `failedAttempts`.
+ */
+export async function runCase(
+  run: (recordCall: RecordCall) => Promise<TriageDecision>,
+  opts: Parameters<typeof withTransportRetry>[1],
+): Promise<
+  | {
+      ok: true;
+      decision: TriageDecision;
+      calls: CallSummary[];
+      failedAttempts: FailedAttempt[];
+      latencyMs: number;
+      retries: number;
+    }
+  | {
+      ok: false;
+      error: unknown;
+      failedAttempts: FailedAttempt[];
+      retries: number;
+    }
+> {
+  const failedAttempts: FailedAttempt[] = [];
+  let calls: TriageCallRecord[] = [];
+  let latencyMs = 0;
+  const outcome = await withTransportRetry(async () => {
+    calls = [];
+    const started = performance.now();
+    try {
+      const decision = await run((call) => {
+        calls.push(call);
+        return Promise.resolve();
+      });
+      latencyMs = Math.round(performance.now() - started);
+      return decision;
+    } catch (err) {
+      failedAttempts.push({
+        calls: summarizeCalls(calls),
+        error: summarizeError(err),
+      });
+      throw err;
+    }
+  }, opts);
+  return outcome.ok
+    ? {
+        ok: true,
+        decision: outcome.value,
+        calls: summarizeCalls(calls),
+        failedAttempts,
+        latencyMs,
+        retries: outcome.retries,
+      }
+    : {
+        ok: false,
+        error: outcome.error,
+        failedAttempts,
+        retries: outcome.retries,
+      };
+}
+
 export interface Metrics {
   cases: number;
   practiceArea: { correct: number; total: number };
@@ -213,7 +306,11 @@ export function computeMetrics(
         (reviewReasons[l.actual.reviewReason] ?? 0) + 1;
     }
   }
-  const allCalls = lines.flatMap((l) => l.calls);
+  // Failed attempts spend tokens too, so they count toward the totals.
+  const allCalls = caseLines.flatMap((l) => [
+    ...(l.scored ? l.calls : []),
+    ...(l.failedAttempts ?? []).flatMap((a) => a.calls),
+  ]);
   const latencies = lines.map((l) => l.latencyMs);
   return {
     cases: lines.length,
@@ -268,10 +365,12 @@ export function computeMetrics(
   };
 }
 
+/** `analysis` is hand-written markdown (eval/analysis.md), appended as a Notes section. */
 export function renderResults(
   meta: RunMeta,
   m: Metrics,
   lines: ScoredLine[],
+  analysis?: string,
 ): string {
   const rate = (x: { correct: number; total: number }) =>
     `${pct(x.correct, x.total)} (${x.correct}/${x.total})`;
@@ -288,13 +387,16 @@ export function renderResults(
       ? `${l.expected.urgency} / ${l.actual.urgency ?? '-'} ${mark(l.actual.urgency === l.expected.urgency)}`
       : 'not scored';
     const status = `${l.actual.status}${l.actual.reviewReason ? ` (${l.actual.reviewReason})` : ''}`;
-    const calls = l.calls.map((c) => `${c.kind}:${c.outcome}`).join(', ');
+    const calls = [
+      ...failedAttemptsText(l),
+      l.calls.map((c) => `${c.kind}:${c.outcome}`).join(', '),
+    ].join(' → ');
     return `| ${l.id} | ${area} | ${urgency} | ${status} | ${calls} | ${l.latencyMs} |`;
   });
   return [
     '# Evaluation results',
     '',
-    `Model: \`${m.models.join(', ') || meta.model}\` via ${meta.provider} · prompt \`${meta.promptVersion}\` · structured mode \`${meta.structuredMode}\` · reasoning effort \`${meta.reasoningEffort ?? 'unset'}\` · max output tokens ${meta.maxOutputTokens} · run started ${meta.startedAt}`,
+    `Model: \`${m.models.join(', ') || meta.model}\` via ${meta.provider} · prompt \`${meta.promptVersion}\` · structured mode \`${meta.structuredMode}\` · reasoning effort \`${meta.reasoningEffort ?? 'unset'}\` · max output tokens ${meta.maxOutputTokens} · timeout ${meta.timeoutMs ?? 'not recorded'} ms · run started ${meta.startedAt}`,
     '',
     `> ${m.cases} synthetic cases. This is a smoke test, not a statistically meaningful benchmark: one case is ${pct(1, m.cases)} of any rate below.`,
     '',
@@ -314,11 +416,27 @@ export function renderResults(
     '',
     '## Per case (expected / actual)',
     '',
+    'Calls lists each attempt in order; `[...]` is an attempt that ended in a transport error and was retried. Latency is the final attempt only.',
+    '',
     '| Case | Practice area | Urgency | Final status | Calls | Latency ms |',
     '|---|---|---|---|---|---|',
     ...rows,
     '',
+    ...(analysis ? ['## Notes', '', analysis.trim(), ''] : []),
   ].join('\n');
+}
+
+function failedAttemptsText(l: ScoredLine): string[] {
+  if (l.failedAttempts) {
+    return l.failedAttempts.map(
+      (a) =>
+        `[${[...a.calls.map((c) => `${c.kind}:${c.outcome}`), `failed: ${a.error.kind ?? a.error.errorClass}`].join(', ')}]`,
+    );
+  }
+  // Run files from before failed attempts were recorded only kept the count.
+  return l.retries > 0
+    ? [`[${l.retries} failed attempt(s), details not recorded]`]
+    : [];
 }
 
 /** Discloses cases scored against more than one acceptable practice area. */
