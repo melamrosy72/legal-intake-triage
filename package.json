@@ -5,7 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
-    "node": ">=20.19"
+    "node": "^22.22.3 || >=24.15.0"
   },
   "scripts": {
     "build": "nest build",
@@ -13,8 +13,8 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"{src,test,eval,scripts}/**/*.ts\" \"*.ts\"",
+    "format:check": "prettier --check \"{src,test,eval,scripts}/**/*.ts\" \"*.ts\"",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
