@@ -132,7 +132,7 @@ The two loops never overlap. A **bad output** gets at most one repair call, beca
 
 ## How to run
 
-### With the fake provider (no API key, about 2 minutes)
+### With the fake provider (no API key, about 3 minutes on a first run)
 
 Requires Docker.
 
