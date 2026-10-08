@@ -57,13 +57,14 @@ A law firm receives free-text inquiries from prospective clients (web form, emai
 
 ## 3. Stack
 
-- Node.js 20+, TypeScript in strict mode, NestJS
-- PostgreSQL 16 with Prisma
-- Redis 7 with BullMQ (`@nestjs/bullmq`)
-- Zod for the output schema and for environment validation
-- Jest and Supertest
-- Docker Compose for Postgres, Redis and the app
-- LLM provider: selected by `LLM_PROVIDER` (`openrouter` or `fake`). The real adapter targets **OpenRouter** through its OpenAI-compatible chat completions API, using the official OpenAI SDK with a configurable base URL (`LLM_BASE_URL`). Because the base URL and model are configuration, the same adapter also works against OpenAI directly.
+- Node.js 20.19+ (CI and Docker use Node 22 LTS or later), TypeScript 6 in strict mode, NestJS 12 (ESM)
+- PostgreSQL 16 with Prisma 7 through the `pg` driver adapter (`@prisma/adapter-pg`)
+- Redis 7 with BullMQ 6, used directly (`Queue` and `Worker` in two small Nest providers). `@nestjs/bullmq` is not used: it takes worker options only as static decorator arguments, and concurrency, the rate limiter and the backoff strategy come from the validated environment.
+- Zod 4 for the output schema, request validation and environment validation
+- Vitest and Supertest (Nest 12 is ESM-only and its scaffold uses Vitest; Jest's ESM mode is experimental)
+- ESLint and Prettier
+- Docker Compose for Postgres and Redis; the app container is added with the Dockerfile in M6
+- LLM provider: selected by `LLM_PROVIDER` (`openrouter` or `fake`). The real adapter targets **OpenRouter** through its OpenAI-compatible chat completions API, using the official OpenAI SDK (retries off) with a configurable base URL (`LLM_BASE_URL`). On OpenRouter it sends `provider: { require_parameters: true }` and, when `LLM_REASONING_EFFORT` is set, `reasoning: { effort, exclude: true }`. Because the base URL and model are configuration, the same adapter also works against other OpenAI-compatible endpoints (newer OpenAI reasoning models need `max_completion_tokens` instead of `max_tokens`).
 
 ---
 
@@ -117,22 +118,24 @@ enum ReviewReason {
   SUSPECTED_INJECTION
   MODEL_REFUSED
   PROVIDER_FAILURE
+  INTERNAL_ERROR // a non-provider failure (bug, database) that outlasted every attempt
 }
 
 model Inquiry {
-  id             String         @id @default(uuid())
-  idempotencyKey String         @unique
-  requestHash    String         // sha256 of the normalized request body
+  id             String        @id @default(uuid())
+  idempotencyKey String        @unique
+  requestHash    String // sha256 of the trimmed inquiry text
   rawText        String
-  status         InquiryStatus  @default(RECEIVED)
+  status         InquiryStatus @default(RECEIVED)
   reviewReason   ReviewReason?
-  result         Json?          // the validated triage object; null if output was never valid
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  result         Json? // the validated triage object; null if output was never valid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   processedAt    DateTime?
   llmCalls       LlmCall[]
 
   @@index([status, createdAt])
+  @@map("inquiries")
 }
 
 enum LlmCallKind {
@@ -156,7 +159,7 @@ model LlmCall {
   id            String         @id @default(uuid())
   inquiryId     String
   inquiry       Inquiry        @relation(fields: [inquiryId], references: [id])
-  jobAttempt    Int            // which BullMQ attempt this call belonged to (1-based)
+  jobAttempt    Int // which BullMQ attempt this call belonged to (1-based)
   kind          LlmCallKind
   provider      String
   model         String
@@ -166,16 +169,19 @@ model LlmCall {
   outputTokens  Int?
   outcome       LlmCallOutcome
   httpStatus    Int?
-  errorCode     String?        // short machine code, never the inquiry text
+  errorCode     String? // short machine code, never the inquiry text
   createdAt     DateTime       @default(now())
 
   @@index([inquiryId, createdAt])
+  @@map("llm_calls")
 }
 ```
 
 Notes:
 
 - `result` is stored whenever the output was valid and grounded, **including** when the inquiry is routed to review for low confidence. The reviewer sees the model's suggestion.
+- `INTERNAL_ERROR` is a failure that is not the provider's (a bug, the database) and outlasted every queue attempt, or a job BullMQ itself failed (for example after stalling too often). It keeps code problems apart from `PROVIDER_FAILURE`.
+- Tables are mapped to `inquiries` and `llm_calls`; columns keep their camelCase names.
 - `llm_calls` never stores the prompt or the raw response. This is a deliberate privacy trade-off: easier debugging is given up to avoid duplicating sensitive client text. State this in the README.
 
 ---
