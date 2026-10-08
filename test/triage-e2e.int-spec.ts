@@ -4,6 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeLlmClient, keywordTriage } from '../src/llm/fake-llm.client.js';
 import { LlmTransportError } from '../src/llm/llm.errors.js';
+import { PROMPT_VERSION } from '../src/triage/triage.prompt.js';
 import { createTestApp } from './test-app.js';
 
 const TEXT =
@@ -50,7 +51,7 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
           jobAttempt: 1,
           kind: 'INITIAL',
           outcome: 'OK',
-          promptVersion: 'triage-v1',
+          promptVersion: PROMPT_VERSION,
         },
       ],
     });

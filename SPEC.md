@@ -306,7 +306,7 @@ Provider "strict" modes usually support only a subset of JSON Schema and may not
 
 ---
 
-## 9. Prompt (version `triage-v1`)
+## 9. Prompt (version `triage-v2`)
 
 Keep the prompt in `triage.prompt.ts` with an exported `PROMPT_VERSION` constant. Any change to the text bumps the version, which is recorded on every `llm_calls` row.
 
@@ -324,7 +324,7 @@ Practice areas:
 - EMPLOYMENT: workplace disputes, such as wrongful termination, discrimination or harassment at work, unpaid wages or overtime, retaliation and non-compete agreements.
 - CRIMINAL_DEFENSE: being investigated, arrested or charged with a crime, including DUI, drug, theft and assault charges, and criminal court dates.
 - REAL_ESTATE: landlord-tenant disputes, evictions, lockouts, leases, security deposits, property sales and purchases, and boundary or title problems.
-- ESTATE_PLANNING: wills, trusts, powers of attorney, probate and inheritance disputes after a death.
+- ESTATE_PLANNING: wills, trusts, powers of attorney, probate, will contests and inheritance disputes after a death.
 - BUSINESS: forming or running a company, contracts between businesses, partner or shareholder disputes and commercial debts.
 - OTHER: clearly a legal matter but outside every area above, for example tax, bankruptcy or intellectual property.
 - UNCLEAR: the text does not give enough to decide which area applies.
@@ -332,7 +332,7 @@ Practice areas:
 Rules:
 - isLegalInquiry: false for spam, sales pitches, wrong numbers, or anything not seeking legal help.
 - practiceArea: exactly one allowed value. Use UNCLEAR when the text does not give enough to decide. Use OTHER when it is clearly legal but outside the list. Do not guess.
-- urgency: HIGH only when the text states a deadline or hearing within days, an arrest or detention, or an immediate risk to safety or housing. MEDIUM when it states a deadline within weeks or an ongoing harm. LOW otherwise.
+- urgency: HIGH only when the text states a deadline or hearing within days, an arrest or detention, or an immediate risk to safety or housing. MEDIUM when it states a deadline within weeks, or ongoing harm: harmful conduct that is still happening to the client now, such as continuing harassment or abuse. Past losses, unpaid past amounts and ongoing medical treatment are not ongoing harm. LOW otherwise.
 - evidence: when practiceArea is not UNCLEAR, include a quote supporting it. When urgency is MEDIUM or HIGH, include a quote supporting it. Every quote must be copied character for character from the inquiry. Do not paraphrase, translate, shorten with ellipses, or correct typos.
 - summary: one or two neutral sentences in English, using only facts stated in the inquiry.
 - missingInfo: up to five facts an intake coordinator would need to ask for next.
