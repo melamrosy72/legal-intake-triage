@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { INestApplication, Logger } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import request from 'supertest';
-import type { App } from 'supertest/types.js';
 import {
   afterAll,
   beforeAll,
@@ -12,15 +10,15 @@ import {
   it,
   vi,
 } from 'vitest';
-import { AppModule } from '../src/app.module.js';
-import { PrismaService } from '../src/prisma/prisma.service.js';
+import { createTestApp } from './test-app.js';
 
 const TEXT =
   'My landlord gave me an eviction notice and the hearing is on Friday.';
 
 describe('Inquiries API', () => {
-  let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let t: Awaited<ReturnType<typeof createTestApp>>;
+  let app: typeof t.app;
+  let prisma: typeof t.prisma;
 
   const post = (key: string | undefined, body: unknown) => {
     const req = request(app.getHttpServer()).post('/inquiries');
@@ -29,17 +27,13 @@ describe('Inquiries API', () => {
   };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-    prisma = app.get(PrismaService);
+    t = await createTestApp();
+    ({ app, prisma } = t);
+    // These tests are about the HTTP layer; with the worker paused, statuses stay RECEIVED.
+    await t.worker.pause();
   });
 
-  beforeEach(async () => {
-    await prisma.$executeRawUnsafe('TRUNCATE llm_calls, inquiries');
-  });
+  beforeEach(() => t.reset());
 
   afterAll(async () => {
     await app.close();
@@ -67,6 +61,9 @@ describe('Inquiries API', () => {
       attempts: [],
     });
     expect(await prisma.inquiry.count()).toBe(1);
+    // One job: the replay's enqueue (same jobId) is ignored by BullMQ.
+    const jobs = await t.queue.getJobs();
+    expect(jobs.map((j) => j.id)).toEqual([first.body.id]);
   });
 
   // Test 20
