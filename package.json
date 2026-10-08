@@ -21,7 +21,8 @@
     "prisma:migrate": "prisma migrate dev",
     "test": "vitest run",
     "test:int": "vitest run --config ./vitest.config.int.ts",
-    "llm:smoke": "tsx scripts/llm-smoke.ts"
+    "llm:smoke": "tsx scripts/llm-smoke.ts",
+    "eval": "tsx eval/run-eval.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.2",
