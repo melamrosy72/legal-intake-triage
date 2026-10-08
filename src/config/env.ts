@@ -34,7 +34,8 @@ const EnvSchema = z
     LLM_STRUCTURED_MODE: z
       .enum(['json_schema', 'json_object'])
       .default('json_schema'),
-    LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+    // The free reasoning model's p95 was 18.9s in the first eval, so 20s left no margin.
+    LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(800),
     LLM_TEMPERATURE: optionalNumber(z.number().min(0).max(2)),
     // Only sent to OpenRouter, and only when set. Unset = no `reasoning` field at all.

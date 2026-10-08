@@ -11,7 +11,7 @@ describe('parseEnv', () => {
     const env = parseEnv(BASE);
     expect(env).toMatchObject({
       LLM_PROVIDER: 'fake',
-      LLM_TIMEOUT_MS: 20_000,
+      LLM_TIMEOUT_MS: 30_000,
       LLM_MAX_OUTPUT_TOKENS: 800,
     });
     expect(env.LLM_TEMPERATURE).toBeUndefined();
