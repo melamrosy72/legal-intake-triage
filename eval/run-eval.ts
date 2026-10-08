@@ -30,6 +30,7 @@ import {
   type TriageCallRecord,
 } from '../src/triage/triage.service.js';
 import {
+  acceptedAreas,
   computeMetrics,
   parseDataset,
   parseRunFile,
@@ -171,7 +172,7 @@ for (const [i, c] of todo.entries()) {
     append(line);
     const a = line.actual;
     console.log(
-      `${c.id} ${a.status}${a.reviewReason ? `(${a.reviewReason})` : ''} area=${a.practiceArea ?? '-'}/${c.expected.practiceArea} urgency=${a.urgency ?? '-'}/${c.expected.urgency} calls=${line.calls.map((x) => x.outcome).join('+')} ${latencyMs}ms`,
+      `${c.id} ${a.status}${a.reviewReason ? `(${a.reviewReason})` : ''} area=${a.practiceArea ?? '-'}/${acceptedAreas(c.expected).join('|')} urgency=${a.urgency ?? '-'}/${c.expected.urgency} calls=${line.calls.map((x) => x.outcome).join('+')} ${latencyMs}ms`,
     );
     continue;
   }

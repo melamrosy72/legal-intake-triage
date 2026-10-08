@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { LlmTransportError } from '../src/llm/llm.errors.js';
 import { PRACTICE_AREAS } from '../src/triage/triage.schema.js';
 import {
+  acceptedAreas,
   computeMetrics,
   parseDataset,
   parseRunFile,
@@ -25,7 +26,7 @@ describe('eval/dataset.jsonl coverage (SPEC §14)', () => {
   it('has at least one legal case for every practice area', () => {
     for (const area of PRACTICE_AREAS) {
       expect(
-        legal.some((c) => c.expected.practiceArea === area),
+        legal.some((c) => acceptedAreas(c.expected).includes(area)),
         area,
       ).toBe(true);
     }
@@ -257,6 +258,24 @@ describe('run file and metrics', () => {
     expect(m.reviewReasons).toEqual({ INVALID_OUTPUT: 1 });
     expect(m.requests).toBe(1 + 1 + 2 + 1 + 4);
     expect(m.tokens).toEqual({ input: 310, output: 155 });
+  });
+
+  it('scores a case with a list of acceptable areas as correct for any of them', () => {
+    const twoIssues = (actual: string) =>
+      scored(`c-${actual}`, {
+        expected: {
+          isLegalInquiry: true,
+          practiceArea: ['PERSONAL_INJURY', 'EMPLOYMENT'],
+          urgency: 'LOW',
+        },
+        actual: { practiceArea: actual },
+      });
+    const m = computeMetrics([
+      twoIssues('PERSONAL_INJURY'),
+      twoIssues('EMPLOYMENT'),
+      twoIssues('FAMILY'),
+    ]);
+    expect(m.practiceArea).toEqual({ correct: 2, total: 3 });
   });
 
   it('p95 uses the nearest rank', () => {

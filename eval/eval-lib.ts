@@ -12,13 +12,28 @@ export const EvalCaseSchema = z.object({
   text: z.string().min(1),
   expected: z.object({
     isLegalInquiry: z.boolean(),
-    practiceArea: z.enum(PRACTICE_AREAS),
+    // A list when more than one answer is defensible (e.g. two issues in one message).
+    practiceArea: z.union([
+      z.enum(PRACTICE_AREAS),
+      z.array(z.enum(PRACTICE_AREAS)).min(2),
+    ]),
     urgency: z.enum(['LOW', 'MEDIUM', 'HIGH']),
     expectReview: z.boolean().optional(),
   }),
   note: z.string().optional(),
 });
 export type EvalCase = z.infer<typeof EvalCaseSchema>;
+
+/** Every practice area that counts as correct for a case. */
+export function acceptedAreas(expected: EvalCase['expected']): string[] {
+  return Array.isArray(expected.practiceArea)
+    ? expected.practiceArea
+    : [expected.practiceArea];
+}
+
+const areaCorrect = (l: ScoredLine) =>
+  l.actual.practiceArea !== null &&
+  acceptedAreas(l.expected).includes(l.actual.practiceArea);
 
 export function parseDataset(jsonl: string): EvalCase[] {
   const cases = jsonl
@@ -203,10 +218,7 @@ export function computeMetrics(
   return {
     cases: lines.length,
     practiceArea: {
-      correct: count(
-        legal,
-        (l) => l.actual.practiceArea === l.expected.practiceArea,
-      ),
+      correct: count(legal, areaCorrect),
       total: legal.length,
     },
     urgency: {
@@ -270,7 +282,7 @@ export function renderResults(
   const rows = lines.map((l) => {
     const mark = (ok: boolean) => (ok ? 'ok' : '**x**');
     const area = l.expected.isLegalInquiry
-      ? `${l.expected.practiceArea} / ${l.actual.practiceArea ?? '-'} ${mark(l.actual.practiceArea === l.expected.practiceArea)}`
+      ? `${acceptedAreas(l.expected).join(' or ')} / ${l.actual.practiceArea ?? '-'} ${mark(areaCorrect(l))}`
       : 'not scored';
     const urgency = l.expected.isLegalInquiry
       ? `${l.expected.urgency} / ${l.actual.urgency ?? '-'} ${mark(l.actual.urgency === l.expected.urgency)}`
@@ -286,6 +298,7 @@ export function renderResults(
     '',
     `> ${m.cases} synthetic cases. This is a smoke test, not a statistically meaningful benchmark: one case is ${pct(1, m.cases)} of any rate below.`,
     '',
+    ...multiAreaNote(lines),
     '| Metric | Value |',
     '|---|---|',
     `| Practice-area accuracy (legal inquiries) | ${rate(m.practiceArea)} |`,
@@ -306,4 +319,18 @@ export function renderResults(
     ...rows,
     '',
   ].join('\n');
+}
+
+/** Discloses cases scored against more than one acceptable practice area. */
+function multiAreaNote(lines: ScoredLine[]): string[] {
+  const multi = lines.filter((l) => acceptedAreas(l.expected).length > 1);
+  if (multi.length === 0) return [];
+  return [
+    `Practice area is scored correct for ${multi
+      .map((l) => `${l.id} if it is ${acceptedAreas(l.expected).join(' or ')}`)
+      .join(
+        '; ',
+      )} (more than one issue in the message, so more than one answer is defensible).`,
+    '',
+  ];
 }
