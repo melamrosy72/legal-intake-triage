@@ -177,7 +177,7 @@ npm run eval             # real provider: 20–40 requests; resumable with -- --
 npm run eval -- --render # rewrite eval/results.md from the latest run, no requests
 ```
 
-Integration tests use a separate `triage_test` database and Redis database 1, so they never touch dev data.
+Integration tests use a separate `triage_test` database and Redis database 1, so they never touch dev data. Point them elsewhere with `TEST_DATABASE_URL` and `TEST_REDIS_URL` (CI does).
 
 ---
 
