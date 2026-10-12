@@ -102,8 +102,8 @@ The two loops never overlap. A **bad output** gets at most one repair call, beca
 | Routed to human review | 25% (5/20): LOW_CONFIDENCE 4, SUSPECTED_INJECTION 1 |
 | Needed a repair call | 10% (2/20) |
 | Schema or grounding failure after repair | 0 |
-| Latency per case, avg / p95 | 11.5 s / 18.9 s |
-| Tokens, input / output (output includes reasoning) | 16,545 / 18,299 |
+| Latency per case, avg / p95 | 11539 ms / 18890 ms |
+| Tokens, input / output (output includes reasoning) | 16545 / 18299 |
 | Real requests used | 25 (20 first calls + 2 repairs + 3 in two attempts retried after timeouts) |
 
 - **c14 is the one miss.** It describes two issues (an injury, then a firing caused by it). The model answered `UNCLEAR`, so the inquiry was routed to human review (`LOW_CONFIDENCE`) rather than mislabelled. The case accepts `PERSONAL_INJURY` or `EMPLOYMENT` and is scored as a miss. Future improvement: multi-area classification (a primary area plus secondary ones).
@@ -201,9 +201,12 @@ src/
   inquiries/   HTTP API: idempotent create, detail, review queue
   triage/      schema, prompt, grounding, TriageService (inner loop), queue, processor (outer loop), backoff
   llm/         LlmClient interface, OpenRouter adapter, fake clients
-  common/      exception filter that logs error class and code only
+  common/      exception filter (logs error class and code only), body-parser errors, dependency outages
   config/      Zod-validated environment
+  prisma/      PrismaService (pg driver adapter)
+prisma/        schema and migrations
 eval/          dataset, runner, results
+scripts/       llm-smoke.ts: one real request to check the provider setup
 test/          integration tests (real Postgres and Redis, fake LLM)
 SPEC.md        the specification this was built from
 ```

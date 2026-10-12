@@ -215,7 +215,7 @@ Returns `{ id, status, reviewReason, result, createdAt, processedAt, llmCalls: [
 
 ### `GET /inquiries?status=NEEDS_HUMAN_REVIEW&limit=20&cursor=`
 
-The human review queue. Cursor pagination on `(createdAt, id)`, default limit 20, max 100.
+The human review queue. Cursor pagination on `(createdAt, id)`, default limit 20, max 100. Returns `{ items: [{ id, status, reviewReason, result, createdAt, processedAt }], nextCursor }`; `nextCursor` is `null` on the last page.
 
 ### `GET /health`
 
@@ -237,6 +237,7 @@ export interface LlmClient {
 export interface LlmRequest {
   system: string;
   user: string;
+  followUp?: string; // extra user turn after `user`: the repair message
   schemaName: string;
   jsonSchema: Record<string, unknown>; // generated from the Zod schema
   maxOutputTokens: number;
@@ -463,7 +464,13 @@ Validate with Zod at boot and fail fast on anything missing or malformed.
 src/
   main.ts
   app.module.ts
-  config/env.ts
+  common/
+    safe-exception.filter.ts
+    body-parser.ts
+    dependency-unavailable.ts
+  config/
+    env.ts
+    env.module.ts
   prisma/prisma.service.ts
   health/health.controller.ts
   inquiries/
@@ -482,12 +489,17 @@ src/
     grounding.ts
     triage.service.ts
     backoff.ts
+    triage.queue.ts
     triage.processor.ts
     triage.module.ts
 eval/
   dataset.jsonl
   run-eval.ts
+  eval-lib.ts
   results.md
+  analysis.md
+  runs/
+scripts/llm-smoke.ts
 test/
 prisma/schema.prisma
 docker-compose.yml
