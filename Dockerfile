@@ -13,7 +13,7 @@ FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
-# ponytail: the image still carries the Prisma CLI and typescript (~100 MB): npm installs them as
+# Note: the image still carries the Prisma CLI and typescript (~100 MB): npm installs them as
 # required peers of @prisma/client even with --omit=dev/--omit=peer. Prune them if size matters.
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=build /app/dist ./dist
