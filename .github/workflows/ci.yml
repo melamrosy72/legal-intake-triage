@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# The jobs only read the repository.
+permissions:
+  contents: read
+
 # Node 24 LTS: the Nest CLI's tooling needs Node ^22.22.3 or >=24.15.
 env:
   NODE_VERSION: '24'
