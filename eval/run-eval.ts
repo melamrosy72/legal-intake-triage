@@ -79,6 +79,7 @@ function report(runPath: string, all: EvalCase[]): void {
   const scored = scoredById(lines);
   const metrics = computeMetrics(lines);
   console.log(`\nRequests used in this run: ${metrics.requests}.`);
+  const scoredInOrder = all.flatMap((c) => scored.get(c.id) ?? []);
   const missing = all.filter((c) => !scored.has(c.id)).map((c) => c.id);
   if (missing.length > 0) {
     console.log(
@@ -89,12 +90,7 @@ function report(runPath: string, all: EvalCase[]): void {
   const analysis = existsSync(ANALYSIS)
     ? readFileSync(ANALYSIS, 'utf8')
     : undefined;
-  const markdown = renderResults(
-    meta,
-    metrics,
-    all.map((c) => scored.get(c.id)!),
-    analysis,
-  );
+  const markdown = renderResults(meta, metrics, scoredInOrder, analysis);
   writeFileSync(RESULTS, markdown);
   console.log(`\n${markdown}\nWrote ${RESULTS}`);
 }
@@ -133,8 +129,9 @@ let alreadyScored = new Set<string>();
 if (args.resume) {
   runPath = latestRunFile();
   const previous = parseRunFile(readFileSync(runPath, 'utf8'));
-  if (!previous.meta) throw new Error(`${runPath} has no meta line`);
-  const changed = SAME_SETUP.filter((k) => previous.meta![k] !== meta[k]);
+  const previousMeta = previous.meta;
+  if (!previousMeta) throw new Error(`${runPath} has no meta line`);
+  const changed = SAME_SETUP.filter((k) => previousMeta[k] !== meta[k]);
   if (changed.length > 0) {
     throw new Error(
       `Refusing to resume ${runPath}: ${changed.join(', ')} changed since that run. Start a new run instead.`,
