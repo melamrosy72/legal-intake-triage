@@ -471,9 +471,14 @@ src/
   config/
     env.ts
     env.module.ts
-  prisma/prisma.service.ts
-  health/health.controller.ts
+  prisma/
+    prisma.module.ts
+    prisma.service.ts
+  health/
+    health.module.ts
+    health.controller.ts
   inquiries/
+    inquiries.module.ts
     inquiries.controller.ts
     inquiries.service.ts
     dto/create-inquiry.dto.ts
