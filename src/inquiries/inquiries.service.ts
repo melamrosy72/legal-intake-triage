@@ -5,6 +5,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { z } from 'zod';
+import {
+  DependencyUnavailableException,
+  toDatabaseOutage,
+} from '../common/dependency-unavailable.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { InquiryStatus } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -62,6 +66,7 @@ export class InquiriesService {
   /**
    * Insert-first idempotency: the unique index on idempotencyKey decides who wins a race.
    * A "select, then insert" check would let two concurrent requests both see "not found".
+   * Postgres or Redis being unreachable becomes a 503: replaying the request recovers it.
    */
   async create(
     idempotencyKey: string,
@@ -75,12 +80,12 @@ export class InquiriesService {
         select: { id: true, status: true },
       });
     } catch (err) {
-      if (!isUniqueViolation(err)) throw err;
+      if (!isUniqueViolation(err)) throw toDatabaseOutage(err);
       return this.replay(idempotencyKey, requestHash, err);
     }
     // Known gap (README): if the process dies between the insert and this line, the inquiry
     // stays RECEIVED with no job until the client replays the request (see replay()).
-    await this.queue.enqueue(inquiry.id);
+    await this.enqueue(inquiry.id);
     return { created: true, inquiry };
   }
 
@@ -89,10 +94,14 @@ export class InquiriesService {
     requestHash: string,
     uniqueViolation: unknown,
   ): Promise<CreateInquiryOutcome> {
-    const existing = await this.prisma.inquiry.findUnique({
-      where: { idempotencyKey },
-      select: { ...inquiryDetail, requestHash: true },
-    });
+    const existing = await this.prisma.inquiry
+      .findUnique({
+        where: { idempotencyKey },
+        select: { ...inquiryDetail, requestHash: true },
+      })
+      .catch((err: unknown) => {
+        throw toDatabaseOutage(err);
+      });
     // Only the idempotency key is unique besides the uuid id, so this is unreachable in practice.
     if (!existing) throw uniqueViolation;
     const { requestHash: existingHash, ...detail } = existing;
@@ -103,8 +112,20 @@ export class InquiriesService {
     }
     // Still RECEIVED: the first request may have failed after its insert, before enqueueing.
     // jobId = inquiry id makes this a no-op when the job already exists.
-    if (detail.status === 'RECEIVED') await this.queue.enqueue(detail.id);
+    if (detail.status === 'RECEIVED') await this.enqueue(detail.id);
     return { created: false, inquiry: toDetailView(detail) };
+  }
+
+  /**
+   * Any enqueue failure is treated as Redis being unavailable: the row is already saved as
+   * RECEIVED, so a 503 asks for exactly what recovers it, a replay that re-enqueues.
+   */
+  private async enqueue(inquiryId: string): Promise<void> {
+    try {
+      await this.queue.enqueue(inquiryId);
+    } catch (err) {
+      throw new DependencyUnavailableException('redis', err);
+    }
   }
 
   async findOne(id: string) {

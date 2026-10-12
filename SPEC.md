@@ -200,13 +200,14 @@ Header `Idempotency-Key` (required, 8–128 chars). Body `{ "text": string }`, t
 | Missing header, empty or oversized text | `400 Bad Request` |
 | Body that is not valid JSON | `400 Bad Request` with the fixed message `Malformed request body` (never a parser message, which can quote the body) |
 | Body over 100 kB | `413 Payload Too Large` |
+| Postgres or Redis unreachable | `503 Service Unavailable` with `Retry-After: 5`. Replaying the same request (same key and body) recovers it |
 | Any request while the service shuts down (SIGTERM) | `503 Service Unavailable` (plain text, from Nest's `return503OnClosing`) |
 
 Implementation requirements:
 
 - Do **not** implement this as "select, then insert". Insert and rely on the unique constraint; on a unique-violation error, load the existing row and compare `requestHash`. This is the only approach that is correct under two concurrent requests with the same key.
 - Enqueue with `jobId = inquiry.id` so a repeated enqueue is ignored by BullMQ.
-- The enqueue must fail fast when Redis is unreachable (queue connection without an offline queue, with a command timeout), so the request answers `500` instead of hanging. The inquiry stays `RECEIVED` and a replay re-enqueues it.
+- The request must not hang on an outage. The enqueue is bounded at 1.5 s and the queue connection has no offline queue, so a lost connection fails at once. A Prisma connection error or any enqueue failure answers `503` with `Retry-After`. If the inquiry was already saved it stays `RECEIVED`, and the replay re-enqueues it.
 
 ### `GET /inquiries/:id`
 
@@ -222,7 +223,7 @@ Checks database and Redis connectivity.
 
 ### Error responses
 
-Every error from the API has one shape: `{ statusCode, error, message }`, where `error` is the HTTP reason phrase. Validation failures add `issues: [{ path, message }]`. Messages are fixed text and never quote the request. Two exceptions: `GET /health` answers `503` with its own `{ status, checks }` body, and during shutdown Nest answers `503` in plain text.
+Every error from the API has one shape: `{ statusCode, error, message }`, where `error` is the HTTP reason phrase. Validation failures add `issues: [{ path, message }]`. Messages are fixed text and never quote the request. A `503` for an unreachable dependency also sends `Retry-After`. Two exceptions to the shape: `GET /health` answers `503` with its own `{ status, checks }` body, and during shutdown Nest answers `503` in plain text.
 
 ---
 
