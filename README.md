@@ -194,6 +194,16 @@ All variables are validated at boot; see [`.env.example`](.env.example) and SPEC
 | `WORKER_RATE_LIMIT_MAX` | `8` | Jobs started per minute |
 | `MAX_INQUIRY_CHARS` | `4000` | Input size limit |
 
+## Code tour
+
+Five files to read first, in this order:
+
+1. [`src/triage/triage.service.ts`](src/triage/triage.service.ts): the inner loop. One model call, the stop-reason, schema and grounding checks, at most one repair call, then the decision rules.
+2. [`src/triage/triage.processor.ts`](src/triage/triage.processor.ts): the outer loop. Retry or give up per error, the last-attempt check, worker idempotency, the conditional final write and the `'failed'` safety net.
+3. [`src/inquiries/inquiries.service.ts`](src/inquiries/inquiries.service.ts): the API side. Insert-first idempotency, the replay that re-enqueues a lost job, `503` on an outage, keyset pagination.
+4. [`src/llm/openai-compatible-llm.client.ts`](src/llm/openai-compatible-llm.client.ts): the provider adapter. SDK retries off, the timeout, and how stop reasons and HTTP errors become one normalized shape.
+5. [`src/triage/grounding.ts`](src/triage/grounding.ts): quote grounding. What the normalized substring check proves, and what it does not.
+
 ## Project layout
 
 ```
