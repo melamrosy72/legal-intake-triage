@@ -10,6 +10,8 @@ const env = parseEnv(); // fail fast before Nest starts wiring anything
 
 const app = await NestFactory.create<NestExpressApplication>(AppModule, {
   bodyParser: false, // registered by useSafeBodyParsers, with sanitized errors
+  // On SIGTERM, new requests get 503 while the worker finishes its job and connections close.
+  return503OnClosing: true,
 });
 useSafeBodyParsers(app);
 app.enableShutdownHooks();
