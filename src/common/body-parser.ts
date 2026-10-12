@@ -1,4 +1,8 @@
-import { HttpException } from '@nestjs/common';
+import {
+  BadRequestException,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
@@ -20,14 +24,16 @@ const BodyParserErrorSchema = z.object({
 function toSafeBodyParserError(err: unknown): unknown {
   const parsed = BodyParserErrorSchema.safeParse(err);
   if (!parsed.success) return err;
-  const { status } = parsed.data;
-  const message =
-    status === 413
-      ? 'Request body too large'
-      : status === 415
-        ? 'Unsupported request body encoding'
-        : 'Malformed request body';
-  return new HttpException(message, status);
+  switch (parsed.data.status) {
+    case 413:
+      return new PayloadTooLargeException('Request body too large');
+    case 415:
+      return new UnsupportedMediaTypeException(
+        'Unsupported request body encoding',
+      );
+    default:
+      return new BadRequestException('Malformed request body');
+  }
 }
 
 /**

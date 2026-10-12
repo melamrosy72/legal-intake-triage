@@ -2,7 +2,7 @@ import {
   ArgumentsHost,
   Catch,
   HttpException,
-  HttpStatus,
+  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
@@ -45,10 +45,7 @@ export class SafeExceptionFilter extends BaseExceptionFilter {
     const { errorClass, code } = describeError(exception);
     this.logger.error(`Unhandled ${errorClass}${code ? ` code=${code}` : ''}`);
     super.catch(
-      new HttpException(
-        'Internal server error',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      ),
+      new InternalServerErrorException('Internal server error'),
       host,
     );
   }

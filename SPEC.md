@@ -220,6 +220,10 @@ The human review queue. Cursor pagination on `(createdAt, id)`, default limit 20
 
 Checks database and Redis connectivity.
 
+### Error responses
+
+Every error from the API has one shape: `{ statusCode, error, message }`, where `error` is the HTTP reason phrase. Validation failures add `issues: [{ path, message }]`. Messages are fixed text and never quote the request. Two exceptions: `GET /health` answers `503` with its own `{ status, checks }` body, and during shutdown Nest answers `503` in plain text.
+
 ---
 
 ## 7. LLM client abstraction

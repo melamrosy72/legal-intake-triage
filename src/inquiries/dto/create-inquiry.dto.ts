@@ -35,6 +35,8 @@ export function parseOrBadRequest<T extends z.ZodType>(
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
     throw new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
       message: 'Validation failed',
       issues: parsed.error.issues.map((i) => ({
         path: i.path.join('.'),

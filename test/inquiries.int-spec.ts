@@ -131,6 +131,7 @@ describe('Inquiries API', () => {
       expect(res.status).toBe(400);
       expect(res.body).toEqual({
         statusCode: 400,
+        error: 'Bad Request',
         message: 'Malformed request body',
       });
       expect(JSON.stringify(logged)).not.toContain('SECRET-CLIENT-TEXT');
@@ -144,6 +145,7 @@ describe('Inquiries API', () => {
     expect(res.status).toBe(413);
     expect(res.body).toEqual({
       statusCode: 413,
+      error: 'Payload Too Large',
       message: 'Request body too large',
     });
     expect(logged).toEqual([]);
@@ -259,5 +261,33 @@ describe('Inquiries API', () => {
     ])('returns 400 for %s', async (_case, query) => {
       await list(query).expect(400);
     });
+  });
+
+  it('answers every client error with { statusCode, error, message }', async () => {
+    const key = randomUUID();
+    await post(key, { text: TEXT }).expect(202);
+    const server = app.getHttpServer();
+    const responses = await Promise.all([
+      post(randomUUID(), { text: '' }),
+      post(key, { text: 'A different body.' }),
+      request(server).get(`/inquiries/${randomUUID()}`),
+      request(server).get('/inquiries').query({ cursor: 'not-a-cursor' }),
+    ]);
+
+    expect(responses.map((r) => r.body)).toEqual([
+      {
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Validation failed',
+        issues: [{ path: 'text', message: expect.any(String) }],
+      },
+      {
+        statusCode: 409,
+        error: 'Conflict',
+        message: expect.any(String),
+      },
+      { statusCode: 404, error: 'Not Found', message: 'Inquiry not found' },
+      { statusCode: 400, error: 'Bad Request', message: 'Invalid cursor' },
+    ]);
   });
 });

@@ -32,7 +32,11 @@ describe('SafeExceptionFilter', () => {
 
     expect(reply).toHaveBeenCalledWith(
       {},
-      { statusCode: 500, message: 'Internal server error' },
+      {
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: 'Internal server error',
+      },
       500,
     );
     expect(logged).toEqual([

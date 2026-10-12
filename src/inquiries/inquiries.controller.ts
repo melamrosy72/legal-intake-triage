@@ -57,9 +57,11 @@ export class InquiriesController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     // A non-uuid can never match a row; answering 404 keeps arbitrary path bytes away from the DB.
-    if (!InquiryIdSchema.safeParse(id).success) throw new NotFoundException();
+    if (!InquiryIdSchema.safeParse(id).success) {
+      throw new NotFoundException('Inquiry not found');
+    }
     const inquiry = await this.inquiries.findOne(id);
-    if (!inquiry) throw new NotFoundException();
+    if (!inquiry) throw new NotFoundException('Inquiry not found');
     return inquiry;
   }
 }
