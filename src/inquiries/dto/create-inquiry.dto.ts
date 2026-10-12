@@ -7,7 +7,9 @@ export const IdempotencyKeySchema = z
   .min(8)
   .max(128);
 
-export function createInquiryBodySchema(maxChars: number) {
+export function createInquiryBodySchema(
+  maxChars: number,
+): z.ZodType<{ text: string }> {
   return z.object({
     text: z
       .string()

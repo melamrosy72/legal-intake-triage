@@ -11,6 +11,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 
 type CheckResult = 'ok' | 'down';
 
+interface HealthBody {
+  status: 'ok' | 'error';
+  checks: { database: CheckResult; redis: CheckResult };
+}
+
 @Controller('health')
 export class HealthController implements OnModuleDestroy {
   private readonly redis: Redis;
@@ -31,7 +36,7 @@ export class HealthController implements OnModuleDestroy {
   }
 
   @Get()
-  async check() {
+  async check(): Promise<HealthBody> {
     const [database, redis] = await Promise.all([
       this.probe(() => this.prisma.$queryRaw`SELECT 1`),
       this.probe(async () => {
@@ -39,7 +44,7 @@ export class HealthController implements OnModuleDestroy {
         return this.redis.ping();
       }),
     ]);
-    const body = {
+    const body: HealthBody = {
       status: database === 'ok' && redis === 'ok' ? 'ok' : 'error',
       checks: { database, redis },
     };

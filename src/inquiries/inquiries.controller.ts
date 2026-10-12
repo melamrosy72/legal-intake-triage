@@ -20,7 +20,12 @@ import {
   ListInquiriesQuerySchema,
   parseOrBadRequest,
 } from './dto/create-inquiry.dto.js';
-import { InquiriesService } from './inquiries.service.js';
+import {
+  InquiriesService,
+  type CreateInquiryOutcome,
+  type InquiryDetail,
+  type InquiryPage,
+} from './inquiries.service.js';
 
 @Controller('inquiries')
 export class InquiriesController {
@@ -39,7 +44,7 @@ export class InquiriesController {
     @Headers('idempotency-key') rawKey: unknown,
     @Body() rawBody: unknown,
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<CreateInquiryOutcome['inquiry']> {
     const key = parseOrBadRequest(IdempotencyKeySchema, rawKey);
     const { text } = parseOrBadRequest(this.bodySchema, rawBody);
     const outcome = await this.inquiries.create(key, text);
@@ -48,14 +53,14 @@ export class InquiriesController {
   }
 
   @Get()
-  list(@Query() rawQuery: unknown) {
+  list(@Query() rawQuery: unknown): Promise<InquiryPage> {
     return this.inquiries.list(
       parseOrBadRequest(ListInquiriesQuerySchema, rawQuery),
     );
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string): Promise<InquiryDetail> {
     // A non-uuid can never match a row; answering 404 keeps arbitrary path bytes away from the DB.
     if (!InquiryIdSchema.safeParse(id).success) {
       throw new NotFoundException('Inquiry not found');

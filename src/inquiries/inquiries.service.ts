@@ -48,13 +48,24 @@ const inquirySummary = {
   processedAt: true,
 } satisfies Prisma.InquirySelect;
 
-type InquiryDetailRow = Prisma.InquiryGetPayload<{
+/** GET /inquiries/:id: the inquiry with every model call made for it. */
+export type InquiryDetail = Prisma.InquiryGetPayload<{
   select: typeof inquiryDetail;
 }>;
 
+/** One row of GET /inquiries. */
+export type InquirySummary = Prisma.InquiryGetPayload<{
+  select: typeof inquirySummary;
+}>;
+
+export interface InquiryPage {
+  items: InquirySummary[];
+  nextCursor: string | null;
+}
+
 export type CreateInquiryOutcome =
   | { created: true; inquiry: { id: string; status: InquiryStatus } }
-  | { created: false; inquiry: InquiryDetailRow };
+  | { created: false; inquiry: InquiryDetail };
 
 @Injectable()
 export class InquiriesService {
@@ -128,7 +139,7 @@ export class InquiriesService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<InquiryDetail | null> {
     return this.prisma.inquiry.findUnique({
       where: { id },
       select: inquiryDetail,
@@ -140,7 +151,7 @@ export class InquiriesService {
     status?: InquiryStatus;
     limit: number;
     cursor?: string;
-  }) {
+  }): Promise<InquiryPage> {
     const after = params.cursor ? decodeCursor(params.cursor) : undefined;
     const rows = await this.prisma.inquiry.findMany({
       where: {
