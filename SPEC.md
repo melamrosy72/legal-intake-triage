@@ -205,6 +205,7 @@ Implementation requirements:
 
 - Do **not** implement this as "select, then insert". Insert and rely on the unique constraint; on a unique-violation error, load the existing row and compare `requestHash`. This is the only approach that is correct under two concurrent requests with the same key.
 - Enqueue with `jobId = inquiry.id` so a repeated enqueue is ignored by BullMQ.
+- The enqueue must fail fast when Redis is unreachable (queue connection without an offline queue, with a command timeout), so the request answers `500` instead of hanging. The inquiry stays `RECEIVED` and a replay re-enqueues it.
 
 ### `GET /inquiries/:id`
 

@@ -1,5 +1,6 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import { describeError } from '../common/safe-exception.filter.js';
 import { ENV, type Env } from '../config/env.js';
 
 export const TRIAGE_QUEUE_NAME = 'triage';
@@ -14,10 +15,19 @@ export interface TriageJobData {
 @Injectable()
 export class TriageQueue implements OnModuleDestroy {
   readonly queue: Queue<TriageJobData>;
+  private readonly logger = new Logger(TriageQueue.name);
 
   constructor(@Inject(ENV) env: Env) {
     this.queue = new Queue<TriageJobData>(TRIAGE_QUEUE_NAME, {
-      connection: { url: env.REDIS_URL },
+      connection: {
+        url: env.REDIS_URL,
+        // enqueue() runs inside POST /inquiries. With Redis down, ioredis would hold the command in
+        // its offline queue across reconnects (minutes); fail at once instead, and bound a command
+        // on a connection that is up but not answering. The client replays and the replay
+        // re-enqueues (InquiriesService.replay).
+        enableOfflineQueue: false,
+        commandTimeout: 5_000,
+      },
       defaultJobOptions: {
         attempts: env.QUEUE_ATTEMPTS,
         backoff: { type: TRIAGE_BACKOFF_TYPE },
@@ -25,6 +35,13 @@ export class TriageQueue implements OnModuleDestroy {
         removeOnComplete: { count: 1000 },
         removeOnFail: { count: 5000 },
       },
+    });
+    // Without a listener BullMQ prints the raw error with console.error; log class and code only.
+    this.queue.on('error', (err) => {
+      const { errorClass, code } = describeError(err);
+      this.logger.error(
+        `queue error ${errorClass}${code ? ` code=${code}` : ''}`,
+      );
     });
   }
 
