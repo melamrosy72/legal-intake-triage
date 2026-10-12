@@ -1,8 +1,8 @@
-import { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Worker } from 'bullmq';
 import { Test } from '@nestjs/testing';
-import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
+import { useSafeBodyParsers } from '../src/common/body-parser.js';
 import { FakeLlmClient, keywordTriage } from '../src/llm/fake-llm.client.js';
 import {
   LLM_CLIENT,
@@ -21,14 +21,17 @@ export class SwitchableLlm implements LlmClient {
   }
 }
 
-/** The full app (API + worker) with the LLM replaced. No network calls. */
+/** The full app (API + worker), set up like main.ts, with the LLM replaced. No network calls. */
 export async function createTestApp() {
   const llm = new SwitchableLlm();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(LLM_CLIENT)
     .useValue(llm)
     .compile();
-  const app: INestApplication<App> = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    bodyParser: false,
+  });
+  useSafeBodyParsers(app);
   await app.init();
   const prisma = app.get(PrismaService);
   const queue = app.get(TriageQueue).queue;

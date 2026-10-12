@@ -30,7 +30,8 @@ export function describeError(err: unknown): {
 /**
  * Replaces Nest's default handling of non-HttpException errors, which logs the full error
  * (message and stack). HttpExceptions (our 400/404/409) keep the default behaviour.
- * Malformed JSON never reaches this filter: Nest's Express adapter answers it with a 400 itself.
+ * Body-parser errors (malformed JSON, oversized body) arrive here already sanitized by
+ * useSafeBodyParsers, as HttpExceptions with fixed messages.
  */
 @Catch()
 export class SafeExceptionFilter extends BaseExceptionFilter {

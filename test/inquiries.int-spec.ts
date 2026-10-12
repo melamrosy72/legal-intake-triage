@@ -102,23 +102,51 @@ describe('Inquiries API', () => {
     expect(await prisma.inquiry.count()).toBe(0);
   });
 
-  it('answers malformed JSON with 400 and never logs the body', async () => {
+  /** Sends a raw JSON body and returns the response plus every error-level log line. */
+  const postRaw = async (body: string) => {
     const logged: unknown[] = [];
     const spy = vi
       .spyOn(Logger.prototype, 'error')
       .mockImplementation((...args) => void logged.push(...args));
     try {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/inquiries')
         .set('Idempotency-Key', randomUUID())
         .set('Content-Type', 'application/json')
-        .send('{"text": "SECRET-CLIENT-TEXT')
-        .expect(400);
+        .send(body);
+      return { res, logged };
     } finally {
       spy.mockRestore();
     }
-    // Nest's Express adapter turns the parse error into a 400 itself and logs nothing.
-    expect(JSON.stringify(logged)).not.toContain('SECRET-CLIENT-TEXT');
+  };
+
+  it.each([
+    ['an unterminated string', '{"text": "SECRET-CLIENT-TEXT'],
+    ['a bare value', 'SECRET-CLIENT-TEXT my landlord'],
+    ['an unquoted value', '{"text": SECRET-CLIENT-TEXT}'],
+  ])(
+    'answers malformed JSON (%s) with a fixed 400 that neither echoes nor logs the body',
+    async (_case, body) => {
+      const { res, logged } = await postRaw(body);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        statusCode: 400,
+        message: 'Malformed request body',
+      });
+      expect(JSON.stringify(logged)).not.toContain('SECRET-CLIENT-TEXT');
+    },
+  );
+
+  it('answers a body over the 100 kB limit with 413, not 500, and logs nothing', async () => {
+    const { res, logged } = await postRaw(
+      JSON.stringify({ text: 'a'.repeat(110_000) }),
+    );
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({
+      statusCode: 413,
+      message: 'Request body too large',
+    });
+    expect(logged).toEqual([]);
   });
 
   it('accepts text exactly at MAX_INQUIRY_CHARS', async () => {
