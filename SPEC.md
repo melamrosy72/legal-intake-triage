@@ -198,6 +198,8 @@ Header `Idempotency-Key` (required, 8–128 chars). Body `{ "text": string }`, t
 | Same key, same body | `200 OK` with the existing inquiry's current state. No new row, no new job |
 | Same key, different body | `409 Conflict` |
 | Missing header, empty or oversized text | `400 Bad Request` |
+| Body that is not valid JSON | `400 Bad Request` with the fixed message `Malformed request body` (never a parser message, which can quote the body) |
+| Body over 100 kB | `413 Payload Too Large` |
 
 Implementation requirements:
 

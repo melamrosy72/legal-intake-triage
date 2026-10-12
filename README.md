@@ -68,7 +68,7 @@ The two loops never overlap. A **bad output** gets at most one repair call, beca
 | Bug or database error during processing | Any non-transport error | Retried through the normal attempts, then `INTERNAL_ERROR` (never stuck in `PROCESSING`) | processor "INTERNAL_ERROR" tests |
 | Job failed by BullMQ itself (stalled too often) | Worker `'failed'` event with `finishedOn` set | `INTERNAL_ERROR` | e2e "stalling too often" test (reproduces BullMQ's deferred failure) |
 | Job lost between insert and enqueue | Client replays the same request | Replay of a still-`RECEIVED` inquiry re-enqueues (same `jobId`, so a no-op if the job exists) | e2e "replay … lost job" test |
-| Inquiry text leaking into logs or Redis | Design rule | Logs carry ids, outcomes, timings, error class and code only; jobs carry only the id; job errors are sanitized | `src/common/safe-exception.filter.spec.ts`; processor log-line test |
+| Inquiry text leaking into logs, Redis or error responses | Design rule | Logs carry ids, outcomes, timings, error class and code only; jobs carry only the id; job errors are sanitized; malformed or oversized bodies get fixed messages (`400`, `413`), never the parser's text | `src/common/safe-exception.filter.spec.ts`; processor log-line test; malformed-JSON and 413 tests in `test/inquiries.int-spec.ts` |
 
 ---
 
