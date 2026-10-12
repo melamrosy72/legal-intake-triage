@@ -128,7 +128,7 @@ The two loops never overlap. A **bad output** gets at most one repair call, beca
 - **Still possible to end up stuck in `PROCESSING`:** if the database is down during the last attempt's final write. Stalled jobs that BullMQ fails are handled.
 - **Runtime image is about 760 MB,** partly because of that Prisma CLI peer.
 
-**If it is ever exposed publicly with a real API key**, it must sit behind a shared-secret header and a rate limiter, and the provider account must have a spend limit. The Docker setup always uses the fake provider.
+**If it is ever exposed publicly with a real API key**, it must sit behind a shared-secret header and a rate limiter, and the provider account must have a spend limit. It would also need standard security headers (for example `helmet`), which this demo does not set. The Docker setup always uses the fake provider.
 
 ---
 
