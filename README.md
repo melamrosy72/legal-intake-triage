@@ -210,3 +210,7 @@ scripts/       llm-smoke.ts: one real request to check the provider setup
 test/          integration tests (real Postgres and Redis, fake LLM)
 SPEC.md        the specification this was built from
 ```
+
+## License
+
+[MIT](LICENSE)
