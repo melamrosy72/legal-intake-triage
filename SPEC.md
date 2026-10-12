@@ -158,7 +158,7 @@ enum LlmCallOutcome {
 model LlmCall {
   id            String         @id @default(uuid())
   inquiryId     String
-  inquiry       Inquiry        @relation(fields: [inquiryId], references: [id])
+  inquiry       Inquiry        @relation(fields: [inquiryId], references: [id], onDelete: Restrict) // the audit trail is never deleted with its inquiry
   jobAttempt    Int // which BullMQ attempt this call belonged to (1-based)
   kind          LlmCallKind
   provider      String
