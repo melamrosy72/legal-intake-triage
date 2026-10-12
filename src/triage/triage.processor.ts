@@ -37,6 +37,7 @@ export class TriageJobError extends Error {
 export class TriageProcessor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TriageProcessor.name);
   private worker?: Worker<TriageJobData>;
+  private jobsInFlight = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -100,18 +101,26 @@ export class TriageProcessor implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * A graceful close waits for the job in flight. With none in flight there is nothing to wait
+   * for, and if Redis was never reachable a graceful close would wait forever (BullMQ waits on
+   * its fetch loop, which waits for the connection), so it closes without waiting.
+   */
   async onModuleDestroy(): Promise<void> {
-    await this.worker?.close();
+    await this.worker?.close(this.jobsInFlight === 0);
   }
 
   /** Public so tests can drive one attempt without Redis timing. */
   async process(job: Job<TriageJobData>): Promise<void> {
+    this.jobsInFlight++;
     try {
       await this.handle(job);
     } catch (err) {
       // LlmTransportError's message is just its kind, and it carries retryAfterMs for the backoff.
       if (err instanceof LlmTransportError) throw err;
       throw new TriageJobError(describeError(err));
+    } finally {
+      this.jobsInFlight--;
     }
   }
 
