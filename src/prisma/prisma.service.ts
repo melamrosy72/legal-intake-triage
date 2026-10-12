@@ -11,6 +11,9 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
       adapter: new PrismaPg({
         connectionString: env.DATABASE_URL,
         connectionTimeoutMillis: 5_000,
+        // Postgres cancels any app query running longer than this. It is set on this pool only:
+        // the Prisma CLI (migrations) connects with DATABASE_URL alone, so a migration is not cut off.
+        statement_timeout: 10_000,
       }),
     });
   }
