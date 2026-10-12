@@ -3,6 +3,7 @@ dist
 coverage
 src/generated
 .env
+.env.*
 .git
 eval/runs
 *.tsbuildinfo
