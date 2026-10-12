@@ -6,12 +6,12 @@ The point of this project is not the classification. It is the reliability layer
 
 ---
 
-## 0. Working agreement (for Claude Code)
+## 0. Working agreement
 
-Follow these rules for the whole build.
+This spec drove a milestone-by-milestone build with Claude Code. The rules for that build:
 
-1. **One milestone at a time.** Build milestone N, run its acceptance checks, then stop and wait. Do not start N+1 until I say so.
-2. **After each milestone, write a short debrief**: what was built, the key decisions, what could go wrong with it, and which files to read first. I am learning this domain and need to be able to explain every part.
+1. **One milestone at a time:** build it, run its acceptance checks, stop for review.
+2. **After each milestone, a short written debrief:** what was built, the key decisions, what could go wrong, and which files to read first.
 3. **Do not add anything outside the scope in section 2.** No RAG, no vector database, no auth system, no UI, no streaming, no multi-tenancy. If something seems missing, ask.
 4. **Verify library APIs against the installed version**, not from memory. This matters most for BullMQ (backoff strategy, `UnrecoverableError`, `attemptsMade` semantics), Prisma (error codes), and the LLM provider SDK (structured output parameters, stop-reason field names, timeout and retry options). Take the model ID from the provider's current documentation.
 5. **Tests ship with the code** in the same milestone. No network calls in unit tests.
