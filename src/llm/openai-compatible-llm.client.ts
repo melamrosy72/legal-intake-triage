@@ -63,6 +63,8 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
     let body: CompletionBody;
     try {
       body = await this.client.chat.completions.create(
+        // The SDK's params type has no `provider` or `reasoning` (OpenRouter extensions), so the
+        // body is built as a plain object; the request spec tests pin exactly what is sent.
         this.buildBody(
           req,
         ) as unknown as OpenAI.ChatCompletionCreateParamsNonStreaming,
