@@ -8,7 +8,7 @@ import type {
   TriageDecision,
 } from '../src/triage/triage.service.js';
 
-export const EvalCaseSchema = z.object({
+const EvalCaseSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
   expected: z.object({
