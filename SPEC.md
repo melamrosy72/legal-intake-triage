@@ -211,7 +211,7 @@ Implementation requirements:
 
 ### `GET /inquiries/:id`
 
-Returns `{ id, status, reviewReason, result, createdAt, processedAt, attempts: [{ jobAttempt, kind, outcome, latencyMs, inputTokens, outputTokens, model, promptVersion }] }`. `404` if unknown. Never returns `rawText` in the list endpoint; the single-item endpoint may include it.
+Returns `{ id, status, reviewReason, result, createdAt, processedAt, llmCalls: [{ jobAttempt, kind, outcome, latencyMs, inputTokens, outputTokens, model, promptVersion }] }`. `404` if unknown. Never returns `rawText` in the list endpoint; the single-item endpoint may include it.
 
 ### `GET /inquiries?status=NEEDS_HUMAN_REVIEW&limit=20&cursor=`
 

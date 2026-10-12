@@ -46,7 +46,7 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
       reviewReason: null,
       result: { practiceArea: 'REAL_ESTATE', urgency: 'HIGH' },
       processedAt: expect.any(String),
-      attempts: [
+      llmCalls: [
         {
           jobAttempt: 1,
           kind: 'INITIAL',
@@ -73,7 +73,7 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
     expect(done.status).toBe('COMPLETED');
     // jobAttempt comes from BullMQ's attemptsMade: 1 for the failure, 2 for the retry.
     expect(
-      done.attempts.map((a: { jobAttempt: number; outcome: string }) => [
+      done.llmCalls.map((a: { jobAttempt: number; outcome: string }) => [
         a.jobAttempt,
         a.outcome,
       ]),
@@ -114,7 +114,7 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
     expect(done).toMatchObject({
       status: 'NEEDS_HUMAN_REVIEW',
       reviewReason: 'INTERNAL_ERROR',
-      attempts: [], // the processor never ran, so the model was never called
+      llmCalls: [], // the processor never ran, so the model was never called
     });
   });
 
@@ -158,6 +158,6 @@ describe('end to end: POST → queue → worker → GET (fake LLM)', () => {
 
     const done = await poll(body.id);
     expect(done.status).toBe('COMPLETED');
-    expect(done.attempts).toHaveLength(1); // processed once, not once per replay
+    expect(done.llmCalls).toHaveLength(1); // processed once, not once per replay
   });
 });

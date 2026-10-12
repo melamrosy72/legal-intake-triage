@@ -54,7 +54,7 @@ type InquiryDetailRow = Prisma.InquiryGetPayload<{
 
 export type CreateInquiryOutcome =
   | { created: true; inquiry: { id: string; status: InquiryStatus } }
-  | { created: false; inquiry: ReturnType<typeof toDetailView> };
+  | { created: false; inquiry: InquiryDetailRow };
 
 @Injectable()
 export class InquiriesService {
@@ -113,7 +113,7 @@ export class InquiriesService {
     // Still RECEIVED: the first request may have failed after its insert, before enqueueing.
     // jobId = inquiry id makes this a no-op when the job already exists.
     if (detail.status === 'RECEIVED') await this.enqueue(detail.id);
-    return { created: false, inquiry: toDetailView(detail) };
+    return { created: false, inquiry: detail };
   }
 
   /**
@@ -129,11 +129,10 @@ export class InquiriesService {
   }
 
   async findOne(id: string) {
-    const row = await this.prisma.inquiry.findUnique({
+    return this.prisma.inquiry.findUnique({
       where: { id },
       select: inquiryDetail,
     });
-    return row && toDetailView(row);
   }
 
   /** Keyset pagination on (createdAt, id), oldest first so the review queue is worked FIFO. */
@@ -165,10 +164,6 @@ export class InquiriesService {
         rows.length > params.limit && last ? encodeCursor(last) : null,
     };
   }
-}
-
-function toDetailView({ llmCalls, ...rest }: InquiryDetailRow) {
-  return { ...rest, attempts: llmCalls };
 }
 
 function isUniqueViolation(err: unknown): boolean {

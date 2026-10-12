@@ -58,7 +58,7 @@ describe('Inquiries API', () => {
     expect(second.body).toMatchObject({
       id: first.body.id,
       status: 'RECEIVED',
-      attempts: [],
+      llmCalls: [],
     });
     expect(await prisma.inquiry.count()).toBe(1);
     // One job: the replay's enqueue (same jobId) is ignored by BullMQ.
@@ -155,7 +155,7 @@ describe('Inquiries API', () => {
     await post(randomUUID(), { text: 'a'.repeat(4000) }).expect(202);
   });
 
-  it('GET /inquiries/:id returns the inquiry with its attempts, 404 when unknown', async () => {
+  it('GET /inquiries/:id returns the inquiry with its llmCalls, 404 when unknown', async () => {
     const { body } = await post(randomUUID(), { text: TEXT }).expect(202);
     await prisma.llmCall.create({
       data: {
@@ -183,7 +183,7 @@ describe('Inquiries API', () => {
       result: null,
       createdAt: expect.any(String),
       processedAt: null,
-      attempts: [
+      llmCalls: [
         {
           jobAttempt: 1,
           kind: 'INITIAL',
