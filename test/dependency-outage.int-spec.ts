@@ -51,6 +51,26 @@ describe('while a dependency is unreachable', () => {
     expect(Date.now() - started).toBeLessThan(5_000);
   });
 
+  it.each([
+    ['Postgres', { DATABASE_URL: DEAD_DATABASE_URL }, 'down', 'ok'],
+    ['Redis', { REDIS_URL: DEAD_REDIS_URL }, 'ok', 'down'],
+  ] as const)(
+    'GET /health with %s down → 503 naming the failed check',
+    async (_name, env, database, redis) => {
+      const t = await createTestApp(env);
+      try {
+        const res = await request(t.app.getHttpServer()).get('/health');
+        expect(res.status).toBe(503);
+        expect(res.body).toEqual({
+          status: 'error',
+          checks: { database, redis },
+        });
+      } finally {
+        await t.app.close();
+      }
+    },
+  );
+
   it('POST with Postgres down → 503 with Retry-After, logged as a dependency outage (class and code only)', async () => {
     const t = await createTestApp({ DATABASE_URL: DEAD_DATABASE_URL });
     try {
